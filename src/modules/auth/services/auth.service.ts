@@ -81,7 +81,6 @@ export class AuthService {
 
     const user = await this.userRepo.findByIdentifier(identifier);
 
-    // same error for user_not_found and bad_password to avoid user enumeration
     if (!user || !user.passwordHash) {
       await this.recordLoginAttempt(
         null,

@@ -3,7 +3,6 @@ import { IngestService } from './ingest.service';
 import { IngestGuard } from './ingest.guard';
 import {
   IngestChannelDto,
-  IngestTrendingDto,
   IngestSearchDto,
   IngestDetailDto,
   IngestCommentsDto,
@@ -17,11 +16,6 @@ export class IngestController {
   @Post('channel')
   ingestChannel(@Body() dto: IngestChannelDto) {
     return this.ingestService.ingestChannel(dto);
-  }
-
-  @Post('trending')
-  ingestTrending(@Body() dto: IngestTrendingDto) {
-    return this.ingestService.ingestTrending(dto);
   }
 
   @Post('search')

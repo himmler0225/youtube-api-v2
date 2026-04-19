@@ -26,19 +26,6 @@ export class VideoController {
   }
 
   /**
-   * GET /videos/trending?category=Music&page=1&limit=20
-   * Trending từ batch crawl mới nhất trong DB.
-   */
-  @Get('trending')
-  getTrending(
-    @Query('category') category?: string,
-    @Query('page', new DefaultValuePipe(1), ParseIntPipe) page: number = 1,
-    @Query('limit', new DefaultValuePipe(20), ParseIntPipe) limit: number = 20,
-  ) {
-    return this.videoService.getTrending(page, limit, category);
-  }
-
-  /**
    * GET /videos/live?q=keyword
    * Search live video real-time từ crawler, cache 30s.
    */

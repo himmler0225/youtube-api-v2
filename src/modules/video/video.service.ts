@@ -3,7 +3,6 @@
  *   DB first → miss/live → crawl → lưu DB → trả về
  */
 import { Injectable, NotFoundException } from '@nestjs/common';
-import { Prisma } from '../../../generated/prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { RedisService } from '../redis/redis.service';
 import {
@@ -141,43 +140,6 @@ export class VideoService {
     ]);
 
     return { total, page, limit, videos };
-  }
-
-  // ── Trending ──────────────────────────────────────────────────────────────
-
-  async getTrending(page = 1, limit = 20, category?: string) {
-    // Lấy thời điểm crawl mới nhất
-    const latest = await this.prisma.trendingSnapshot.findFirst({
-      where: category ? { category } : undefined,
-      orderBy: { crawledAt: 'desc' },
-      select: { crawledAt: true },
-    });
-
-    if (!latest) return { total: 0, page, limit, videos: [] };
-
-    const where: Prisma.TrendingSnapshotWhereInput = {
-      crawledAt: latest.crawledAt,
-      ...(category && { category }),
-    };
-
-    const [snapshots, total] = await Promise.all([
-      this.prisma.trendingSnapshot.findMany({
-        where,
-        include: { video: true },
-        orderBy: { rank: 'asc' },
-        skip: (page - 1) * limit,
-        take: limit,
-      }),
-      this.prisma.trendingSnapshot.count({ where }),
-    ]);
-
-    return {
-      total,
-      page,
-      limit,
-      crawledAt: latest.crawledAt,
-      videos: snapshots.map((s) => ({ rank: s.rank, ...s.video })),
-    };
   }
 
   // ── Live search ───────────────────────────────────────────────────────────

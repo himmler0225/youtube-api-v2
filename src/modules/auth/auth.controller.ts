@@ -22,7 +22,6 @@ export class AuthController {
     return this.authService.refresh(payload, req);
   }
 
-  // TODO: thêm @UseGuards(JwtGuard) sau khi implement JwtGuard
   @Post('logout')
   logout(@Req() req: Request) {
     const user = req.user as { userId: string; sessionId: string };

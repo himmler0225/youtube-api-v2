@@ -39,9 +39,13 @@ export class SearchVideoItem {
   @IsOptional()
   description_snippet?: string;
 
+  @IsString()
+  @IsOptional()
+  url?: string;
+
   @IsArray()
   @IsOptional()
-  thumbnails?: object[];
+  thumbnails?: Record<string, unknown>[];
 }
 
 export class IngestSearchDto {

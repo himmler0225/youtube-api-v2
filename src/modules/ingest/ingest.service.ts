@@ -12,7 +12,6 @@ import { CommentRepository } from './repositories/comment.repository';
 import { QueueService } from '../queue/queue.service';
 import { AppLogger } from '../../base/logger/app-logger.service';
 import {
-  IngestTrendingDto,
   IngestSearchDto,
   IngestDetailDto,
   IngestCommentsDto,
@@ -47,47 +46,6 @@ export class IngestService {
     return { channelId: channel.id };
   }
 
-  // ==================== Trending ====================
-
-  async ingestTrending(dto: IngestTrendingDto) {
-    const crawledAt = new Date();
-    let saved = 0;
-
-    for (const [index, video] of dto.videos.entries()) {
-      // Extract trước để tránh lỗi ESLint khi dùng trong ?? expression
-      const videoId = video.video_id;
-      if (!videoId) continue;
-
-      await this.videoRepo.upsertFromCrawl({
-        id: videoId,
-        title: video.title ?? videoId,
-        channelName: video.channel_name,
-        viewsText: video.views,
-        publishedTimeText: video.published_time,
-        thumbnails: video.thumbnail as never,
-      });
-
-      await this.prisma.trendingSnapshot.create({
-        data: {
-          videoId,
-          rank: index + 1,
-          category: dto.category,
-          crawledAt,
-        },
-      });
-
-      // Auto-crawl detail + comments in background
-      await this.queue.addCrawlDetail(videoId);
-      saved++;
-    }
-
-    this.logger.info('Trending ingested', {
-      count: saved,
-      category: dto.category,
-    });
-    return { saved };
-  }
-
   // ==================== Search ====================
 
   async ingestSearch(dto: IngestSearchDto) {
@@ -109,7 +67,7 @@ export class IngestService {
       await this.videoRepo.upsertFromCrawl({
         id: videoId,
         title: video.title ?? videoId,
-        channelId: video.channel_id ?? null,
+        channelId: video.channel_id || null,
         channelName: video.channel,
         viewsText: video.views,
         durationText: video.duration,
