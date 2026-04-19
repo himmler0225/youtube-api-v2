@@ -1,0 +1,255 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
+// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+
+generator client {
+  provider     = "prisma-client"
+  output       = "../generated/prisma"
+  moduleFormat = "cjs"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum UserStatus {
+  ACTIVE
+  BANNED
+  DELETED
+}
+
+enum SessionStatus {
+  ACTIVE
+  REVOKED
+  EXPIRED
+}
+
+enum AuthEventType {
+  LOGIN_SUCCESS
+  LOGIN_FAILED
+  REFRESH_SUCCESS
+  REFRESH_REUSE_DETECTED
+  LOGOUT
+  LOGOUT_ALL
+  PASSWORD_CHANGED
+  API_KEY_CREATED
+  API_KEY_REVOKED
+}
+
+model User {
+  id              String     @id @default(uuid())
+  email           String?    @unique
+  phone           String?    @unique
+  username        String     @unique
+
+  passwordHash    String?
+  passwordAlgo    String?    // e.g. "argon2id-v1"
+  status          UserStatus @default(ACTIVE)
+
+  // Revoke all access token ngay lập tức
+  tokenVersion    Int        @default(0)
+
+  // Optional: bắt buộc verify trước khi dùng
+  emailVerifiedAt DateTime?
+  phoneVerifiedAt DateTime?
+
+  sessions        AuthSession[]
+  auditLogs       AuditLog[]
+  loginAttempts   LoginAttempt[]
+
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([status])
+}
+
+model AuthSession {
+  id                  String        @id @default(uuid()) // sessionId
+  userId              String
+  user                User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  status              SessionStatus @default(ACTIVE)
+
+  // Device binding (chống replay/crawler)
+  deviceId            String        // client giữ cố định
+  deviceName          String?
+  userAgentHash       String?       // hash UA (đỡ lưu PII)
+  ipHash              String?       // hash IP (đỡ lưu PII)
+
+  // Refresh token: opaque random token
+  refreshTokenHash    String        // hash(refreshToken + pepper)
+  refreshTokenFamily  String        // UUID: 1 family cho 1 session
+  refreshExpiresAt    DateTime
+
+  // Rotate / reuse detection
+  lastRotatedAt       DateTime?
+  revokedAt           DateTime?
+  lastSeenAt          DateTime?
+
+  // Optional “siêu mạnh”: proof-of-possession (public key per device/session)
+  devicePublicKey     String?       // lưu public key (base64/PEM)
+  dpopNonce           String?        // nonce chống replay (nếu implement)
+  dpopNonceExpiresAt  DateTime?
+
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  @@index([userId, status])
+  @@index([deviceId])
+  @@index([refreshExpiresAt])
+}
+
+model LoginAttempt {
+  id          BigInt   @id @default(autoincrement())
+  userId      String?
+  user        User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  identifier  String   // email/phone/username
+  ipHash      String?
+  uaHash      String?
+  success     Boolean
+  reason      String?  // "bad_password", "user_banned", "rate_limited"
+  createdAt   DateTime @default(now())
+
+  @@index([identifier, createdAt])
+  @@index([ipHash, createdAt])
+}
+
+model AuditLog {
+  id          BigInt       @id @default(autoincrement())
+  userId      String?
+  user        User?        @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  event       AuthEventType
+  sessionId   String?
+  meta        Json?
+
+  ipHash      String?
+  uaHash      String?
+
+  createdAt   DateTime @default(now())
+
+  @@index([userId, createdAt])
+  @@index([event, createdAt])
+}
+
+// ==================== YouTube Data ====================
+
+// Channel — thông tin kênh, tạo tự động khi crawl video
+model Channel {
+  id     String @id  // YouTube channel ID (UCxxx...)
+  name   String
+  handle String?     // "@xxx"
+  avatar String?     // URL ảnh đại diện
+  banner String?     // URL ảnh bìa
+
+  subscriberCountText String?      // "1.5M subscribers" — text từ crawler
+  description         String? @db.Text
+
+  videos    Video[]
+
+  crawledAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+// Video — bảng trung tâm, kết hợp data từ trending/search/detail
+model Video {
+  id          String   @id  // YouTube video_id
+
+  title       String
+  channelId   String?
+  channel     Channel? @relation(fields: [channelId], references: [id])
+  channelName String?  // fallback nếu chưa có Channel record
+
+  // Metrics dạng text (từ trending/search — chưa parse)
+  viewsText        String?  // "1.2M views"
+  durationText     String?  // "10:30"
+  publishedTimeText String? // "3 days ago"
+
+  // Metrics chính xác (từ detail API)
+  viewCount        BigInt?
+  durationSeconds  Int?
+  isLiveContent    Boolean  @default(false)
+
+  // Nội dung
+  descriptionSnippet String?   @db.Text
+  thumbnails         Json?     // [{url, width, height}, ...]
+
+  // Trạng thái
+  isAvailable       Boolean   @default(true)
+  unavailableReason String?   // lý do nếu video bị ẩn/xóa
+
+  // Thời điểm crawl detail lần cuối
+  detailCrawledAt   DateTime?
+
+  comments          Comment[]
+  trendingSnapshots TrendingSnapshot[]
+  searchResults     SearchResult[]
+
+  crawledAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+
+  @@index([channelId])
+  @@index([crawledAt])
+  @@index([isAvailable])
+}
+
+// TrendingSnapshot — mỗi lần crawl trending tạo 1 bộ snapshot
+// → cho phép theo dõi lịch sử video lên/xuống trending theo thời gian
+model TrendingSnapshot {
+  id        BigInt   @id @default(autoincrement())
+  videoId   String
+  video     Video    @relation(fields: [videoId], references: [id])
+
+  rank      Int      // vị trí trong danh sách (1-based)
+  category  String?  // "Now", "Music", "Gaming"... nếu có
+
+  crawledAt DateTime @default(now())
+
+  @@index([crawledAt])
+  @@index([videoId, crawledAt])
+}
+
+// SearchResult — lưu kết quả search theo query + thời điểm
+// → theo dõi thứ hạng video theo từ khóa theo thời gian
+model SearchResult {
+  id        BigInt   @id @default(autoincrement())
+  videoId   String
+  video     Video    @relation(fields: [videoId], references: [id])
+
+  query     String   // từ khóa tìm kiếm
+  rank      Int      // vị trí trong kết quả (1-based)
+  sort      String   @default("relevance") // "relevance" | "upload_date" | "view_count" | "rating"
+
+  crawledAt DateTime @default(now())
+
+  @@index([query, crawledAt])
+  @@index([videoId])
+}
+
+// Comment — top-level comments và replies dùng cùng 1 bảng (self-relation)
+model Comment {
+  id      String  @id  // YouTube comment_id
+  videoId String
+  video   Video   @relation(fields: [videoId], references: [id])
+
+  // Self-relation: parentId null = top-level, có giá trị = reply
+  parentId String?
+  parent   Comment?  @relation("CommentReplies", fields: [parentId], references: [id])
+  replies  Comment[] @relation("CommentReplies")
+
+  author       String
+  avatar       String?
+  content      String   @db.Text
+  likesCount   Int      @default(0)
+  repliesCount Int      @default(0)       // số reply theo YouTube (chỉ top-level mới có)
+  publishedTimeText String?               // "3 days ago"
+
+  crawledAt DateTime @default(now())
+
+  @@index([videoId])
+  @@index([parentId])
+  @@index([videoId, crawledAt])
+}
