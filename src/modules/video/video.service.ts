@@ -2,16 +2,16 @@
  * VideoService — pattern nhất quán cho tất cả endpoints:
  *   DB first → miss/live → crawl → lưu DB → trả về
  */
-import { Injectable, NotFoundException } from '@nestjs/common';
-import { PrismaService } from '../prisma/prisma.service';
-import { RedisService } from '../redis/redis.service';
+import { Injectable, NotFoundException } from "@nestjs/common";
+import { PrismaService } from "@/modules/prisma/prisma.service";
+import { RedisService } from "@/modules/redis/redis.service";
 import {
   CrawlerClientService,
   CrawlerComment,
   CrawlerVideoDetail,
   CrawlerVideoResult,
-} from '../crawler-client/crawler-client.service';
-import { AppLogger } from '../../base/logger/app-logger.service';
+} from "@/modules/crawler-client/crawler-client.service";
+import { AppLogger } from "@/base/logger/app-logger.service";
 
 const LIVE_VIDEO_TTL = 60; // giây
 const LIVE_SEARCH_TTL = 30; // giây
@@ -36,7 +36,7 @@ export class VideoService {
     });
     if (dbVideo && !dbVideo.isLiveContent) return dbVideo;
 
-    this.logger.info('Fetching video from crawler', { videoId });
+    this.logger.info("Fetching video from crawler", { videoId });
     const result = await this.crawler.getVideoDetail(videoId);
     return this._saveVideoDetail(videoId, result);
   }
@@ -55,7 +55,7 @@ export class VideoService {
       const comments = await this.prisma.comment.findMany({
         where: { videoId, parentId: null },
         include: { replies: true },
-        orderBy: { crawledAt: 'desc' },
+        orderBy: { crawledAt: "desc" },
         skip,
         take: limit,
       });
@@ -63,14 +63,14 @@ export class VideoService {
     }
 
     // Chưa có → crawl → lưu DB → trả trang đầu
-    this.logger.info('Fetching comments from crawler', { videoId });
+    this.logger.info("Fetching comments from crawler", { videoId });
     const crawled = await this.crawler.getComments(videoId, 1, 100);
     await this._saveComments(videoId, crawled);
 
     const comments = await this.prisma.comment.findMany({
       where: { videoId, parentId: null },
       include: { replies: true },
-      orderBy: { crawledAt: 'desc' },
+      orderBy: { crawledAt: "desc" },
       skip,
       take: limit,
     });
@@ -134,7 +134,7 @@ export class VideoService {
         where: { isAvailable: true },
         skip: offset,
         take: limit,
-        orderBy: { crawledAt: 'desc' },
+        orderBy: { crawledAt: "desc" },
       }),
       this.prisma.video.count({ where: { isAvailable: true } }),
     ]);
@@ -157,7 +157,7 @@ export class VideoService {
   // ── Private helpers ───────────────────────────────────────────────────────
 
   private async _saveVideoDetail(videoId: string, result: CrawlerVideoResult) {
-    if ('error' in result && result.error) {
+    if ("error" in result && result.error) {
       await this.prisma.video.upsert({
         where: { id: videoId },
         create: {

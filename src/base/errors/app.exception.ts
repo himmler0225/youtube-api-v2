@@ -8,9 +8,9 @@
  *
  * AllExceptionsFilter sẽ bắt và format thành ApiError chuẩn.
  */
-import { HttpException, HttpStatus } from '@nestjs/common';
-import { ErrorCode } from './error-code';
-import { ERROR_MESSAGES } from './error-messages';
+import { HttpException, HttpStatus } from "@nestjs/common";
+import { ErrorCode } from "./error-code";
+import { ERROR_MESSAGES } from "./error-messages";
 
 export type AppExceptionPayload = {
   code: ErrorCode;
@@ -29,7 +29,7 @@ export class AppException extends HttpException {
     status: number = HttpStatus.BAD_REQUEST,
   ) {
     // Ưu tiên message truyền vào → message mặc định theo code → fallback 'Error'
-    const message = payload.message ?? ERROR_MESSAGES[payload.code] ?? 'Error';
+    const message = payload.message ?? ERROR_MESSAGES[payload.code] ?? "Error";
     super({ code: payload.code, message, details: payload.details }, status);
 
     this.code = payload.code;

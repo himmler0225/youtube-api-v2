@@ -4,10 +4,10 @@
  * Dùng Redis connection đã có (REDIS_HOST / REDIS_PORT / REDIS_DB).
  * Module chỉ đăng ký queue, không chứa processor (processor ở CrawlWorkerModule).
  */
-import { Global, Module } from '@nestjs/common';
-import { BullModule } from '@nestjs/bullmq';
-import { ConfigModule, ConfigService } from '@nestjs/config';
-import { QueueService, CRAWL_DETAIL_QUEUE } from './queue.service';
+import { Global, Module } from "@nestjs/common";
+import { BullModule } from "@nestjs/bullmq";
+import { ConfigModule, ConfigService } from "@nestjs/config";
+import { QueueService, CRAWL_DETAIL_QUEUE } from "./queue.service";
 
 @Global()
 @Module({
@@ -16,9 +16,9 @@ import { QueueService, CRAWL_DETAIL_QUEUE } from './queue.service';
       imports: [ConfigModule],
       useFactory: (config: ConfigService) => ({
         connection: {
-          host: config.get<string>('REDIS_HOST', 'localhost'),
-          port: config.get<number>('REDIS_PORT', 6379),
-          db: config.get<number>('REDIS_DB', 0),
+          host: config.get<string>("REDIS_HOST", "localhost"),
+          port: config.get<number>("REDIS_PORT", 6379),
+          db: config.get<number>("REDIS_DB", 0),
         },
       }),
       inject: [ConfigService],

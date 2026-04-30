@@ -1,12 +1,12 @@
-import { QueryParams, PaginatedResult } from '../query-param';
-import { IBaseRepository } from '../base.repository';
-import { EntityNotFoundException } from '../repository.exceptions';
+import { QueryParams, PaginatedResult } from "@/base/core/query-param";
+import { IBaseRepository } from "@/base/core/base.repository";
+import { EntityNotFoundException } from "@/base/core/repository.exceptions";
 import {
   PrismaDelegate,
   PrismaIncludeValue,
   PrismaQueryArgs,
   WhereClause,
-} from './base-prisma.type';
+} from "./base-prisma.type";
 
 export abstract class BasePrismaRepository<T> implements IBaseRepository<T> {
   protected abstract entityName: string;
@@ -198,7 +198,7 @@ export abstract class BasePrismaRepository<T> implements IBaseRepository<T> {
       const orConditions = fields.map((field) => ({
         [field]: {
           contains: text,
-          mode: 'insensitive',
+          mode: "insensitive",
         },
       }));
 
@@ -213,18 +213,18 @@ export abstract class BasePrismaRepository<T> implements IBaseRepository<T> {
   }
 
   protected buildOrderBy(
-    sort: QueryParams['sort'],
-  ): PrismaQueryArgs['orderBy'] {
+    sort: QueryParams["sort"],
+  ): PrismaQueryArgs["orderBy"] {
     if (!sort) return undefined;
 
     if (Array.isArray(sort)) {
       return sort.map((s) => ({
-        [s.field]: s.order.toLowerCase() as 'asc' | 'desc',
+        [s.field]: s.order.toLowerCase() as "asc" | "desc",
       }));
     }
 
     return {
-      [sort.field]: sort.order.toLowerCase() as 'asc' | 'desc',
+      [sort.field]: sort.order.toLowerCase() as "asc" | "desc",
     };
   }
 
@@ -249,7 +249,7 @@ export abstract class BasePrismaRepository<T> implements IBaseRepository<T> {
 
     return Object.entries(include).reduce(
       (acc, [key, value]) => {
-        if (typeof value === 'boolean') {
+        if (typeof value === "boolean") {
           acc[key] = value;
         } else {
           acc[key] = {

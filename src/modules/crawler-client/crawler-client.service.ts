@@ -4,9 +4,9 @@
  *
  * Crawler yêu cầu header X-API-Key (cùng key đã cấu hình trong crawler .env).
  */
-import { Injectable, ServiceUnavailableException } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
-import { AppLogger } from '../../base/logger/app-logger.service';
+import { Injectable, ServiceUnavailableException } from "@nestjs/common";
+import { ConfigService } from "@nestjs/config";
+import { AppLogger } from "@/base/logger/app-logger.service";
 
 // ── Types phản ánh response thực tế của crawler ──────────────────────────────
 
@@ -68,10 +68,10 @@ export class CrawlerClientService {
     private readonly config: ConfigService,
     private readonly logger: AppLogger,
   ) {
-    this.baseUrl = this.config.getOrThrow<string>('CRAWLER_URL');
+    this.baseUrl = this.config.getOrThrow<string>("CRAWLER_URL");
     this.headers = {
-      'X-API-Key': this.config.getOrThrow<string>('CRAWLER_API_KEY'),
-      'Content-Type': 'application/json',
+      "X-API-Key": this.config.getOrThrow<string>("CRAWLER_API_KEY"),
+      "Content-Type": "application/json",
     };
   }
 
@@ -83,8 +83,9 @@ export class CrawlerClientService {
         throw new Error(`Crawler responded ${res.status} for ${path}`);
       }
       return res.json() as Promise<T>;
-    } catch {
-      throw new ServiceUnavailableException('Crawler service unavailable');
+    } catch (error) {
+      this.logger.warn("Crawler request failed", { path, error });
+      throw new ServiceUnavailableException("Crawler service unavailable");
     }
   }
 

@@ -5,12 +5,12 @@
  * CrawlerClientService được inject tự động (CrawlerClientModule là @Global).
  * Queue connection được lấy từ QueueModule (cũng @Global).
  */
-import { Module } from '@nestjs/common';
-import { BullModule } from '@nestjs/bullmq';
-import { CrawlDetailProcessor } from './crawl-detail.processor';
-import { IngestModule } from '../ingest/ingest.module';
-import { CRAWL_DETAIL_QUEUE } from '../queue/queue.service';
-import { AppLogger } from '../../base/logger/app-logger.service';
+import { Module } from "@nestjs/common";
+import { BullModule } from "@nestjs/bullmq";
+import { CrawlDetailProcessor } from "./crawl-detail.processor";
+import { IngestModule } from "@/modules/ingest/ingest.module";
+import { CRAWL_DETAIL_QUEUE } from "@/modules/queue/queue.service";
+import { AppLogger } from "@/base/logger/app-logger.service";
 
 @Module({
   imports: [

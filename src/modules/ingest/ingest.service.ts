@@ -4,19 +4,21 @@
  * Tất cả operations đều dùng upsert — idempotent, gọi nhiều lần không bị lỗi.
  * Crawler gọi các method này qua IngestController sau mỗi lần crawl.
  */
-import { Injectable } from '@nestjs/common';
-import { PrismaService } from '../prisma/prisma.service';
-import { ChannelRepository } from './repositories/channel.repository';
-import { VideoRepository } from './repositories/video.repository';
-import { CommentRepository } from './repositories/comment.repository';
-import { QueueService } from '../queue/queue.service';
-import { AppLogger } from '../../base/logger/app-logger.service';
+import { Injectable } from "@nestjs/common";
+import { Prisma } from "@generated/prisma/client";
+import { PrismaService } from "@/modules/prisma/prisma.service";
+import { ChannelRepository } from "./repositories/channel.repository";
+import { VideoRepository } from "./repositories/video.repository";
+import { CommentRepository } from "./repositories/comment.repository";
+import { QueueService } from "@/modules/queue/queue.service";
+import { AppLogger } from "@/base/logger/app-logger.service";
 import {
   IngestSearchDto,
   IngestDetailDto,
   IngestCommentsDto,
   IngestChannelDto,
-} from './dto';
+  IngestTrendingDto,
+} from "./dto";
 
 @Injectable()
 export class IngestService {
@@ -42,7 +44,7 @@ export class IngestService {
       description: dto.description,
     });
 
-    this.logger.info('Channel ingested', { channelId: channel.id });
+    this.logger.info("Channel ingested", { channelId: channel.id });
     return { channelId: channel.id };
   }
 
@@ -73,7 +75,7 @@ export class IngestService {
         durationText: video.duration,
         publishedTimeText: video.published_time,
         descriptionSnippet: video.description_snippet,
-        thumbnails: video.thumbnails as never,
+        thumbnails: video.thumbnails as unknown as Prisma.InputJsonValue,
       });
 
       await this.prisma.searchResult.create({
@@ -81,7 +83,7 @@ export class IngestService {
           videoId,
           query: dto.query,
           rank: index + 1,
-          sort: dto.sort ?? 'relevance',
+          sort: dto.sort ?? "relevance",
           crawledAt,
         },
       });
@@ -91,7 +93,7 @@ export class IngestService {
       saved++;
     }
 
-    this.logger.info('Search results ingested', {
+    this.logger.info("Search results ingested", {
       query: dto.query,
       count: saved,
     });
@@ -123,8 +125,56 @@ export class IngestService {
       isAvailable: true,
     });
 
-    this.logger.info('Video detail ingested', { videoId });
+    this.logger.info("Video detail ingested", { videoId });
     return { videoId, available: true };
+  }
+
+  // ==================== Trending ====================
+
+  async ingestTrending(dto: IngestTrendingDto) {
+    const crawledAt = new Date();
+    let saved = 0;
+
+    for (const [index, video] of dto.videos.entries()) {
+      const videoId = video.video_id;
+      if (!videoId) continue;
+
+      if (video.channel_id && video.channel) {
+        await this.channelRepo.upsert({
+          id: video.channel_id,
+          name: video.channel,
+        });
+      }
+
+      await this.videoRepo.upsertFromCrawl({
+        id: videoId,
+        title: video.title ?? videoId,
+        channelId: video.channel_id || null,
+        channelName: video.channel,
+        viewsText: video.views,
+        durationText: video.duration,
+        publishedTimeText: video.published_time,
+        thumbnails: video.thumbnails as unknown as Prisma.InputJsonValue,
+      });
+
+      await this.prisma.trendingSnapshot.create({
+        data: {
+          videoId,
+          rank: video.rank ?? index + 1,
+          category: dto.category,
+          crawledAt,
+        },
+      });
+
+      await this.queue.addCrawlDetail(videoId);
+      saved++;
+    }
+
+    this.logger.info("Trending ingested", {
+      category: dto.category,
+      count: saved,
+    });
+    return { saved };
   }
 
   // ==================== Comments ====================
@@ -166,7 +216,7 @@ export class IngestService {
       }
     }
 
-    this.logger.info('Comments ingested', {
+    this.logger.info("Comments ingested", {
       videoId: dto.video_id,
       count: saved,
     });

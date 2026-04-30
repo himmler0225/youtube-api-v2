@@ -1,11 +1,11 @@
-import { Injectable } from '@nestjs/common';
-import { Prisma, Video } from '../../../../generated/prisma/client';
-import { BasePrismaRepository } from '../../../base/core/prisma/base-prisma.repository';
-import { PrismaService } from '../../prisma/prisma.service';
+import { Injectable } from "@nestjs/common";
+import { Prisma, Video } from "@generated/prisma/client";
+import { BasePrismaRepository } from "@/base/core/prisma/base-prisma.repository";
+import { PrismaService } from "@/modules/prisma/prisma.service";
 
 @Injectable()
 export class VideoRepository extends BasePrismaRepository<Video> {
-  protected entityName = 'Video';
+  protected entityName = "Video";
 
   constructor(private readonly prisma: PrismaService) {
     super(prisma.video);

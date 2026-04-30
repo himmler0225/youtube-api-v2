@@ -1,13 +1,13 @@
 const SENSITIVE_KEYS = [
-  'password',
-  'pass',
-  'token',
-  'accessToken',
-  'refreshToken',
-  'authorization',
-  'cookie',
-  'apiKey',
-  'secret',
+  "password",
+  "pass",
+  "token",
+  "accessToken",
+  "refreshToken",
+  "authorization",
+  "cookie",
+  "apiKey",
+  "secret",
 ];
 
 export function redact(value: unknown): unknown {
@@ -15,11 +15,11 @@ export function redact(value: unknown): unknown {
 
   if (Array.isArray(value)) return value.map(redact);
 
-  if (typeof value === 'object') {
+  if (typeof value === "object") {
     const out: Record<string, unknown> = {};
     for (const [k, v] of Object.entries(value)) {
       if (SENSITIVE_KEYS.includes(k.toLowerCase())) {
-        out[k] = '***REDACTED***';
+        out[k] = "***REDACTED***";
       } else {
         out[k] = redact(v);
       }

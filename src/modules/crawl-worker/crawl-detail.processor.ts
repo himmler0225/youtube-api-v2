@@ -7,15 +7,15 @@
  *   2. Gọi crawler lấy video detail → ingestDetail() lưu DB
  *   3. Nếu không phải live → gọi crawler lấy comments → ingestComments() lưu DB
  */
-import { Processor, WorkerHost } from '@nestjs/bullmq';
-import { Job } from 'bullmq';
+import { Processor, WorkerHost } from "@nestjs/bullmq";
+import { Job } from "bullmq";
 import {
   CrawlerClientService,
   CrawlerVideoDetail,
-} from '../crawler-client/crawler-client.service';
-import { IngestService } from '../ingest/ingest.service';
-import { AppLogger } from '../../base/logger/app-logger.service';
-import { CRAWL_DETAIL_QUEUE } from '../queue/queue.service';
+} from "@/modules/crawler-client/crawler-client.service";
+import { IngestService } from "@/modules/ingest/ingest.service";
+import { AppLogger } from "@/base/logger/app-logger.service";
+import { CRAWL_DETAIL_QUEUE } from "@/modules/queue/queue.service";
 
 @Processor(CRAWL_DETAIL_QUEUE, { concurrency: 3 })
 export class CrawlDetailProcessor extends WorkerHost {
@@ -29,18 +29,18 @@ export class CrawlDetailProcessor extends WorkerHost {
 
   async process(job: Job<{ videoId: string }>): Promise<void> {
     const { videoId } = job.data;
-    this.logger.info('[CrawlWorker] Processing video detail', { videoId });
+    this.logger.info("[CrawlWorker] Processing video detail", { videoId });
 
     // 1. Crawl detail
     const result = await this.crawler.getVideoDetail(videoId);
 
-    if ('error' in result && result.error) {
+    if ("error" in result && result.error) {
       await this.ingest.ingestDetail({
         video_id: videoId,
         error: true,
         reason: result.reason,
       });
-      this.logger.warn('[CrawlWorker] Video unavailable', {
+      this.logger.warn("[CrawlWorker] Video unavailable", {
         videoId,
         reason: result.reason,
       });
@@ -83,11 +83,12 @@ export class CrawlDetailProcessor extends WorkerHost {
           })),
         })),
       });
-      this.logger.info('[CrawlWorker] Comments ingested', { videoId });
-    } catch {
+      this.logger.info("[CrawlWorker] Comments ingested", { videoId });
+    } catch (error) {
       // Comment fetch failing should not fail the job — detail is already saved
-      this.logger.warn('[CrawlWorker] Comment fetch failed, continuing', {
+      this.logger.warn("[CrawlWorker] Comment fetch failed, continuing", {
         videoId,
+        error,
       });
     }
   }

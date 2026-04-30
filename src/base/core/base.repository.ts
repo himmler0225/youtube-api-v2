@@ -1,4 +1,4 @@
-import { QueryParams, PaginatedResult } from './query-param';
+import { QueryParams, PaginatedResult } from "./query-param";
 
 export interface IBaseRepository<T> {
   findAll(params?: QueryParams): Promise<T[]>;

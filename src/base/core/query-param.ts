@@ -1,15 +1,15 @@
 export type FilterOperator =
-  | 'equals'
-  | 'not'
-  | 'in'
-  | 'notIn'
-  | 'lt'
-  | 'lte'
-  | 'gt'
-  | 'gte'
-  | 'contains'
-  | 'startsWith'
-  | 'endsWith';
+  | "equals"
+  | "not"
+  | "in"
+  | "notIn"
+  | "lt"
+  | "lte"
+  | "gt"
+  | "gte"
+  | "contains"
+  | "startsWith"
+  | "endsWith";
 
 export interface FilterValue {
   operator?: FilterOperator;
@@ -23,7 +23,7 @@ export type FilterCondition = Record<
 
 export interface SortOption {
   field: string;
-  order: 'ASC' | 'DESC';
+  order: "ASC" | "DESC";
 }
 
 export interface QueryParams {

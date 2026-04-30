@@ -1,11 +1,11 @@
-import { Injectable } from '@nestjs/common';
-import { Channel } from '../../../../generated/prisma/client';
-import { BasePrismaRepository } from '../../../base/core/prisma/base-prisma.repository';
-import { PrismaService } from '../../prisma/prisma.service';
+import { Injectable } from "@nestjs/common";
+import { Channel } from "@generated/prisma/client";
+import { BasePrismaRepository } from "@/base/core/prisma/base-prisma.repository";
+import { PrismaService } from "@/modules/prisma/prisma.service";
 
 @Injectable()
 export class ChannelRepository extends BasePrismaRepository<Channel> {
-  protected entityName = 'Channel';
+  protected entityName = "Channel";
 
   constructor(private readonly prisma: PrismaService) {
     super(prisma.channel);

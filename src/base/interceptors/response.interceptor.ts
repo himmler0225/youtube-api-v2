@@ -3,11 +3,11 @@ import {
   ExecutionContext,
   Injectable,
   NestInterceptor,
-} from '@nestjs/common';
-import { Observable, map } from 'rxjs';
-import { Request } from 'express';
-import { ErrorCode } from '../errors/error-code';
-import { ApiResponse, isApiResponse } from '../http/api-response';
+} from "@nestjs/common";
+import { Observable, map } from "rxjs";
+import { Request } from "express";
+import { ErrorCode } from "@/base/errors/error-code";
+import { ApiResponse, isApiResponse } from "@/base/http/api-response";
 
 type RequestWithContext = Request & { requestId?: string };
 
@@ -34,7 +34,7 @@ export class ResponseInterceptor implements NestInterceptor {
         return {
           success: true,
           code: ErrorCode.OK,
-          message: 'OK',
+          message: "OK",
           data,
           meta,
         };

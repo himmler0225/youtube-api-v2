@@ -1,15 +1,23 @@
 import {
   IsArray,
+  IsInt,
   IsNotEmpty,
   IsOptional,
   IsString,
+  Min,
   ValidateNested,
 } from "class-validator";
 import { Type } from "class-transformer";
 
-export class SearchVideoItem {
+export class TrendingVideoItem {
   @IsString()
+  @IsNotEmpty()
   video_id: string;
+
+  @IsInt()
+  @Min(1)
+  @IsOptional()
+  rank?: number;
 
   @IsString()
   @IsOptional()
@@ -35,30 +43,18 @@ export class SearchVideoItem {
   @IsOptional()
   published_time?: string;
 
-  @IsString()
-  @IsOptional()
-  description_snippet?: string;
-
-  @IsString()
-  @IsOptional()
-  url?: string;
-
   @IsArray()
   @IsOptional()
   thumbnails?: Record<string, unknown>[];
 }
 
-export class IngestSearchDto {
-  @IsString()
-  @IsNotEmpty()
-  query: string;
-
+export class IngestTrendingDto {
   @IsString()
   @IsOptional()
-  sort?: string;
+  category?: string;
 
   @IsArray()
   @ValidateNested({ each: true })
-  @Type(() => SearchVideoItem)
-  videos: SearchVideoItem[];
+  @Type(() => TrendingVideoItem)
+  videos: TrendingVideoItem[];
 }

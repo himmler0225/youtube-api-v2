@@ -1,4 +1,4 @@
-import { ErrorCode } from '../errors/error-code';
+import { ErrorCode } from "@/base/errors/error-code";
 
 export type ApiMeta = {
   requestId?: string;
@@ -29,10 +29,10 @@ export function isApiResponse(x: unknown): x is ApiResponse<unknown> {
   return (
     x !== null &&
     x !== undefined &&
-    typeof x === 'object' &&
-    'success' in x &&
-    typeof x.success === 'boolean' &&
-    'meta' in x &&
-    typeof x.meta === 'object'
+    typeof x === "object" &&
+    "success" in x &&
+    typeof x.success === "boolean" &&
+    "meta" in x &&
+    typeof x.meta === "object"
   );
 }

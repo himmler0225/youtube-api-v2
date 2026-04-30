@@ -4,14 +4,14 @@ export interface PrismaIncludeValue {
   where?: WhereClause;
   select?: Record<string, boolean>;
   include?: Record<string, boolean | PrismaIncludeValue>;
-  orderBy?: Record<string, 'asc' | 'desc'>;
+  orderBy?: Record<string, "asc" | "desc">;
   skip?: number;
   take?: number;
 }
 
 export interface PrismaQueryArgs {
   where?: WhereClause;
-  orderBy?: Record<string, 'asc' | 'desc'> | Record<string, 'asc' | 'desc'>[];
+  orderBy?: Record<string, "asc" | "desc"> | Record<string, "asc" | "desc">[];
   skip?: number;
   take?: number;
   select?: Record<string, boolean>;

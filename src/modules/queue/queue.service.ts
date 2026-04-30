@@ -1,8 +1,8 @@
-import { Injectable } from '@nestjs/common';
-import { InjectQueue } from '@nestjs/bullmq';
-import { Queue } from 'bullmq';
+import { Injectable } from "@nestjs/common";
+import { InjectQueue } from "@nestjs/bullmq";
+import { Queue } from "bullmq";
 
-export const CRAWL_DETAIL_QUEUE = 'crawl-detail';
+export const CRAWL_DETAIL_QUEUE = "crawl-detail";
 
 @Injectable()
 export class QueueService {
@@ -15,14 +15,14 @@ export class QueueService {
    */
   async addCrawlDetail(videoId: string): Promise<void> {
     await this.queue.add(
-      'crawl-detail',
+      "crawl-detail",
       { videoId },
       {
         jobId: videoId,
         removeOnComplete: 200,
         removeOnFail: 50,
         attempts: 3,
-        backoff: { type: 'exponential', delay: 5_000 },
+        backoff: { type: "exponential", delay: 5_000 },
       },
     );
   }

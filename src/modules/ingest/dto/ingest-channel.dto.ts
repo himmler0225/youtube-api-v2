@@ -1,4 +1,4 @@
-import { IsOptional, IsString, IsNotEmpty } from 'class-validator';
+import { IsOptional, IsString, IsNotEmpty } from "class-validator";
 
 export class IngestChannelDto {
   @IsString()

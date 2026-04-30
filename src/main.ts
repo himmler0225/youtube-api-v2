@@ -1,14 +1,17 @@
-import { NestFactory } from '@nestjs/core';
-import { AppModule } from './app.module';
-import { AppLogger, AllExceptionsFilter, ResponseInterceptor } from './base';
-import { ValidationPipe } from '@nestjs/common';
-import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
+import { NestFactory } from "@nestjs/core";
+import { AppModule } from "./app.module";
+import { AppLogger, AllExceptionsFilter, ResponseInterceptor } from "./base";
+import { ValidationPipe } from "@nestjs/common";
+import { DocumentBuilder, SwaggerModule } from "@nestjs/swagger";
+import helmet from "helmet";
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule, { bufferLogs: true });
 
   const logger = app.get(AppLogger);
   app.useLogger(logger);
+
+  app.use(helmet());
 
   app.useGlobalPipes(
     new ValidationPipe({
@@ -22,34 +25,34 @@ async function bootstrap() {
   app.useGlobalInterceptors(new ResponseInterceptor());
 
   const config = new DocumentBuilder()
-    .setTitle('YouTube API')
+    .setTitle("YouTube API")
     .setDescription(
-      'Enterprise-grade authentication API with refresh token rotation, device binding, and reuse detection',
+      "Enterprise-grade authentication API with refresh token rotation, device binding, and reuse detection",
     )
-    .setVersion('1.0')
+    .setVersion("1.0")
     .addBearerAuth(
       {
-        type: 'http',
-        scheme: 'bearer',
-        bearerFormat: 'JWT',
-        name: 'JWT',
-        description: 'Enter JWT access token',
-        in: 'header',
+        type: "http",
+        scheme: "bearer",
+        bearerFormat: "JWT",
+        name: "JWT",
+        description: "Enter JWT access token",
+        in: "header",
       },
-      'JWT-auth',
+      "JWT-auth",
     )
-    .addTag('auth', 'Authentication endpoints')
-    .addTag('users', 'User management endpoints')
+    .addTag("auth", "Authentication endpoints")
+    .addTag("users", "User management endpoints")
     .build();
 
   const document = SwaggerModule.createDocument(app, config);
-  SwaggerModule.setup('api', app, document, {
+  SwaggerModule.setup("api", app, document, {
     swaggerOptions: {
       persistAuthorization: true,
-      tagsSorter: 'alpha',
-      operationsSorter: 'alpha',
+      tagsSorter: "alpha",
+      operationsSorter: "alpha",
     },
-    customSiteTitle: 'YouTube API Documentation',
+    customSiteTitle: "YouTube API Documentation",
   });
 
   await app.listen(3000);
@@ -58,6 +61,6 @@ async function bootstrap() {
 }
 
 bootstrap().catch((error) => {
-  console.error('Failed to start application:', error);
+  console.error("Failed to start application:", error);
   process.exit(1);
 });

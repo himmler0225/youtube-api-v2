@@ -4,11 +4,11 @@ import {
   ExceptionFilter,
   HttpException,
   HttpStatus,
-} from '@nestjs/common';
-import { Request, Response } from 'express';
-import { ErrorCode } from '../errors/error-code';
-import { ERROR_MESSAGES } from '../errors/error-messages';
-import { AppLogger } from '../logger/app-logger.service';
+} from "@nestjs/common";
+import { Request, Response } from "express";
+import { ErrorCode } from "@/base/errors/error-code";
+import { ERROR_MESSAGES } from "@/base/errors/error-messages";
+import { AppLogger } from "@/base/logger/app-logger.service";
 
 type RequestWithContext = Request & { requestId?: string };
 
@@ -44,14 +44,14 @@ export class AllExceptionsFilter implements ExceptionFilter {
       status = exception.getStatus();
       const response = exception.getResponse();
       const r =
-        typeof response === 'object'
+        typeof response === "object"
           ? (response as HttpExceptionResponse)
           : undefined;
 
-      if (r && typeof r === 'object' && r.code) {
+      if (r && typeof r === "object" && r.code) {
         code = r.code;
         message =
-          typeof r.message === 'string'
+          typeof r.message === "string"
             ? r.message
             : (ERROR_MESSAGES[code] ?? message);
         details = r.details;
@@ -64,9 +64,9 @@ export class AllExceptionsFilter implements ExceptionFilter {
         if (status === HttpStatus.TOO_MANY_REQUESTS)
           code = ErrorCode.RATE_LIMITED;
 
-        if (r && typeof r === 'object') {
+        if (r && typeof r === "object") {
           message =
-            r.message && typeof r.message === 'string'
+            r.message && typeof r.message === "string"
               ? r.message
               : (ERROR_MESSAGES[code] ?? message);
           details =
@@ -77,7 +77,7 @@ export class AllExceptionsFilter implements ExceptionFilter {
       }
     }
 
-    this.logger.error('Unhandled exception', {
+    this.logger.error("Unhandled exception", {
       requestId,
       status,
       code,
