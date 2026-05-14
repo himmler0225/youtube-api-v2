@@ -1,8 +1,9 @@
 import { Injectable } from "@nestjs/common";
 import { InjectQueue } from "@nestjs/bullmq";
 import { Queue } from "bullmq";
+import { CRAWL_DETAIL_QUEUE } from "./constants";
 
-export const CRAWL_DETAIL_QUEUE = "crawl-detail";
+export { CRAWL_DETAIL_QUEUE } from "./constants";
 
 @Injectable()
 export class QueueService {

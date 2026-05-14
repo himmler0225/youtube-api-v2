@@ -19,7 +19,7 @@ export class IngestGuard implements CanActivate {
     const req = context.switchToHttp().getRequest<Request>();
     const key = req.headers["x-service-key"];
 
-    if (!key || key !== this.serviceKey) {
+    if (typeof key !== "string" || key !== this.serviceKey) {
       throw new UnauthorizedException("Invalid service key");
     }
 

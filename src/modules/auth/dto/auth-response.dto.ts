@@ -66,6 +66,20 @@ export class MessageResponseDto {
   message!: string;
 }
 
+export class SuccessResponseDto {
+  @ApiProperty({
+    description: "Whether the operation succeeded",
+    example: true,
+  })
+  success!: boolean;
+
+  @ApiProperty({
+    description: "Result message",
+    example: "Operation completed successfully",
+  })
+  message!: string;
+}
+
 export class SessionDto {
   @ApiProperty({
     description: "Session ID",

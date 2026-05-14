@@ -1,13 +1,7 @@
-import {
-  Controller,
-  Get,
-  Param,
-  Query,
-  ParseIntPipe,
-  DefaultValuePipe,
-} from "@nestjs/common";
+import { Controller, Get, Param, Query } from "@nestjs/common";
 import { ApiOperation, ApiQuery, ApiTags } from "@nestjs/swagger";
 import { SkipThrottle } from "@nestjs/throttler";
+import { PaginationQueryDto } from "@/base/dto/pagination.dto";
 import { VideoService } from "./video.service";
 
 @ApiTags("videos")
@@ -18,28 +12,40 @@ export class VideoController {
 
   @ApiOperation({ summary: "List videos with optional full-text search" })
   @ApiQuery({ name: "q", required: false, description: "Search query" })
-  @ApiQuery({ name: "page", required: false, type: Number })
-  @ApiQuery({ name: "limit", required: false, type: Number })
   @Get()
   listVideos(
     @Query("q") query?: string,
-    @Query("page", new DefaultValuePipe(1), ParseIntPipe) page: number = 1,
-    @Query("limit", new DefaultValuePipe(20), ParseIntPipe) limit: number = 20,
+    @Query() pagination: PaginationQueryDto = new PaginationQueryDto(),
   ) {
-    return this.videoService.listVideos(query, page, limit);
+    return this.videoService.listVideos(
+      query,
+      pagination.page,
+      pagination.limit,
+    );
+  }
+
+  @ApiOperation({
+    summary: "Get YouTube Shorts feed — DB first, miss → crawler",
+  })
+  @Get("shorts")
+  getShorts(
+    @Query() pagination: PaginationQueryDto = new PaginationQueryDto(),
+  ) {
+    return this.videoService.getShorts(pagination.page, pagination.limit);
   }
 
   @ApiOperation({ summary: "Search live videos in real-time from crawler" })
   @ApiQuery({ name: "q", required: true, description: "Search keyword" })
-  @ApiQuery({ name: "page", required: false, type: Number })
-  @ApiQuery({ name: "limit", required: false, type: Number })
   @Get("live")
   searchLive(
     @Query("q") query: string,
-    @Query("page", new DefaultValuePipe(1), ParseIntPipe) page: number = 1,
-    @Query("limit", new DefaultValuePipe(30), ParseIntPipe) limit: number = 30,
+    @Query() pagination: PaginationQueryDto = new PaginationQueryDto(),
   ) {
-    return this.videoService.searchLive(query, page, limit);
+    return this.videoService.searchLive(
+      query,
+      pagination.page,
+      pagination.limit,
+    );
   }
 
   @ApiOperation({ summary: "Get video detail — DB first, miss → crawler" })
@@ -49,14 +55,11 @@ export class VideoController {
   }
 
   @ApiOperation({ summary: "Get video comments" })
-  @ApiQuery({ name: "page", required: false, type: Number })
-  @ApiQuery({ name: "limit", required: false, type: Number })
   @Get(":id/comments")
   getComments(
     @Param("id") id: string,
-    @Query("page", new DefaultValuePipe(1), ParseIntPipe) page: number = 1,
-    @Query("limit", new DefaultValuePipe(30), ParseIntPipe) limit: number = 30,
+    @Query() pagination: PaginationQueryDto = new PaginationQueryDto(),
   ) {
-    return this.videoService.getComments(id, page, limit);
+    return this.videoService.getComments(id, pagination.page, pagination.limit);
   }
 }

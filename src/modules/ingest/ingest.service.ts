@@ -1,9 +1,3 @@
-/**
- * Service xử lý việc lưu data crawl từ youtube-crawler vào DB.
- *
- * Tất cả operations đều dùng upsert — idempotent, gọi nhiều lần không bị lỗi.
- * Crawler gọi các method này qua IngestController sau mỗi lần crawl.
- */
 import { Injectable } from "@nestjs/common";
 import { Prisma } from "@generated/prisma/client";
 import { PrismaService } from "@/modules/prisma/prisma.service";
@@ -31,7 +25,7 @@ export class IngestService {
     private readonly logger: AppLogger,
   ) {}
 
-  // ==================== Channel ====================
+  // ── Channel ──────────────────────────────────────────────────────────────
 
   async ingestChannel(dto: IngestChannelDto) {
     const channel = await this.channelRepo.upsert({
@@ -48,7 +42,7 @@ export class IngestService {
     return { channelId: channel.id };
   }
 
-  // ==================== Search ====================
+  // ── Search ───────────────────────────────────────────────────────────────
 
   async ingestSearch(dto: IngestSearchDto) {
     const crawledAt = new Date();
@@ -71,7 +65,7 @@ export class IngestService {
         title: video.title ?? videoId,
         channelId: video.channel_id || null,
         channelName: video.channel,
-        viewsText: video.views,
+        viewCount: video.view_count ? BigInt(video.view_count) : null,
         durationText: video.duration,
         publishedTimeText: video.published_time,
         descriptionSnippet: video.description_snippet,
@@ -100,7 +94,7 @@ export class IngestService {
     return { saved };
   }
 
-  // ==================== Video Detail ====================
+  // ── Video Detail ──────────────────────────────────────────────────────────
 
   async ingestDetail(dto: IngestDetailDto) {
     const videoId = dto.video_id;
@@ -129,7 +123,7 @@ export class IngestService {
     return { videoId, available: true };
   }
 
-  // ==================== Trending ====================
+  // ── Trending ──────────────────────────────────────────────────────────────
 
   async ingestTrending(dto: IngestTrendingDto) {
     const crawledAt = new Date();
@@ -151,7 +145,7 @@ export class IngestService {
         title: video.title ?? videoId,
         channelId: video.channel_id || null,
         channelName: video.channel,
-        viewsText: video.views,
+        viewCount: video.view_count ? BigInt(video.view_count) : null,
         durationText: video.duration,
         publishedTimeText: video.published_time,
         thumbnails: video.thumbnails as unknown as Prisma.InputJsonValue,
@@ -177,7 +171,7 @@ export class IngestService {
     return { saved };
   }
 
-  // ==================== Comments ====================
+  // ── Comments ──────────────────────────────────────────────────────────────
 
   async ingestComments(dto: IngestCommentsDto) {
     let saved = 0;

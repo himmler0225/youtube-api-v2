@@ -7,57 +7,22 @@
 import { Injectable, ServiceUnavailableException } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { AppLogger } from "@/base/logger/app-logger.service";
+import type {
+  CrawlerVideoResult,
+  CrawlerComment,
+  CrawlerLiveVideo,
+  CrawlerShort,
+} from "./types";
 
-// ── Types phản ánh response thực tế của crawler ──────────────────────────────
-
-export type CrawlerVideoDetail = {
-  video_id: string;
-  title: string;
-  author: string;
-  length_seconds: string; // số giây dạng string
-  views: string; // view count dạng string
-  is_live_content: boolean;
-};
-
-export type CrawlerVideoError = {
-  error: true;
-  reason: string;
-  status: string;
-};
-
-export type CrawlerVideoResult = CrawlerVideoDetail | CrawlerVideoError;
-
-export type CrawlerLiveVideo = {
-  video_id: string;
-  title: string;
-  thumbnail: object[];
-  channel_name: string;
-  url: string;
-  views: string;
-  is_live: boolean;
-};
-
-export type CrawlerCommentReply = {
-  comment_id: string;
-  author: string;
-  avatar?: string;
-  content: string;
-  published_time: string;
-  likes: number;
-};
-
-export type CrawlerComment = {
-  comment_id: string;
-  author: string;
-  avatar?: string;
-  content: string;
-  published_time: string;
-  likes: number;
-  replies_count: number;
-  replies: CrawlerCommentReply[];
-};
-
-// ─────────────────────────────────────────────────────────────────────────────
+export type {
+  CrawlerVideoDetail,
+  CrawlerVideoError,
+  CrawlerVideoResult,
+  CrawlerLiveVideo,
+  CrawlerShort,
+  CrawlerCommentReply,
+  CrawlerComment,
+} from "./types";
 
 @Injectable()
 export class CrawlerClientService {
@@ -111,6 +76,15 @@ export class CrawlerClientService {
       `/api/video/${videoId}/comments?${params.toString()}`,
     );
     return data.comments;
+  }
+
+  /** Lấy danh sách Shorts từ YouTube Shorts feed */
+  async getShorts(limit = 30): Promise<CrawlerShort[]> {
+    const params = new URLSearchParams({ limit: String(limit) });
+    const data = await this._fetch<{ videos: CrawlerShort[] }>(
+      `/api/videos/shorts?${params.toString()}`,
+    );
+    return data.videos;
   }
 
   /** Tìm video đang live theo từ khóa */

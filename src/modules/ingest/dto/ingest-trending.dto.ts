@@ -1,7 +1,9 @@
 import {
+  ArrayMinSize,
   IsArray,
   IsInt,
   IsNotEmpty,
+  IsNumber,
   IsOptional,
   IsString,
   Min,
@@ -31,9 +33,9 @@ export class TrendingVideoItem {
   @IsOptional()
   channel?: string;
 
-  @IsString()
+  @IsNumber()
   @IsOptional()
-  views?: string;
+  view_count?: number;
 
   @IsString()
   @IsOptional()
@@ -53,6 +55,7 @@ export class IngestTrendingDto {
   @IsOptional()
   category?: string;
 
+  @ArrayMinSize(1)
   @IsArray()
   @ValidateNested({ each: true })
   @Type(() => TrendingVideoItem)

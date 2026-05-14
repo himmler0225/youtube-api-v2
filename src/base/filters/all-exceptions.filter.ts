@@ -8,7 +8,10 @@ import {
 import { Request, Response } from "express";
 import { ErrorCode } from "@/base/errors/error-code";
 import { ERROR_MESSAGES } from "@/base/errors/error-messages";
-import { AppLogger } from "@/base/logger/app-logger.service";
+import { AppLogger, parseOrigin } from "@/base/logger/app-logger.service";
+import { AppException } from "@/base/errors/app.exception";
+
+const CONTEXT = "ExceptionFilter";
 
 type RequestWithContext = Request & { requestId?: string };
 
@@ -48,7 +51,7 @@ export class AllExceptionsFilter implements ExceptionFilter {
           ? (response as HttpExceptionResponse)
           : undefined;
 
-      if (r && typeof r === "object" && r.code) {
+      if (r?.code) {
         code = r.code;
         message =
           typeof r.message === "string"
@@ -77,22 +80,59 @@ export class AllExceptionsFilter implements ExceptionFilter {
       }
     }
 
-    this.logger.error("Unhandled exception", {
+    this.logException(exception, {
       requestId,
       status,
       code,
       path: req.url,
       method: req.method,
-      exception: serializeError(exception),
     });
 
-    res.status(status).json({
-      success: false,
-      code,
-      message,
-      details,
-      meta,
-    });
+    res.status(status).json({ success: false, code, message, details, meta });
+  }
+
+  private logException(
+    exception: unknown,
+    info: {
+      requestId?: string;
+      status: number;
+      code: ErrorCode;
+      path: string;
+      method: string;
+    },
+  ) {
+    // AppException 4xx are intentional business errors — warn without stack
+    if (exception instanceof AppException && info.status < 500) {
+      this.logger.warn(
+        "Expected error",
+        {
+          requestId: info.requestId,
+          code: info.code,
+          method: info.method,
+          path: info.path,
+        },
+        CONTEXT,
+      );
+      return;
+    }
+
+    // Everything else is unexpected — log with origin file for debugging
+    const err = exception instanceof Error ? exception : undefined;
+    const origin = parseOrigin(err?.stack);
+
+    this.logger.error(
+      "Unhandled exception",
+      {
+        requestId: info.requestId,
+        status: info.status,
+        code: info.code,
+        method: info.method,
+        path: info.path,
+        ...(origin && { origin }),
+        error: serializeError(exception),
+      },
+      CONTEXT,
+    );
   }
 }
 
@@ -101,7 +141,7 @@ function serializeError(e: unknown) {
     return {
       name: e.name,
       message: e.message,
-      stack: e.stack,
+      stack: e.stack?.split("\n").slice(0, 8).join("\n"),
     };
   }
   return { value: e };

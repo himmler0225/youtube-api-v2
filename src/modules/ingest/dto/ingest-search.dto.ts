@@ -1,6 +1,8 @@
 import {
+  ArrayMinSize,
   IsArray,
   IsNotEmpty,
+  IsNumber,
   IsOptional,
   IsString,
   ValidateNested,
@@ -23,9 +25,9 @@ export class SearchVideoItem {
   @IsOptional()
   channel?: string;
 
-  @IsString()
+  @IsNumber()
   @IsOptional()
-  views?: string;
+  view_count?: number;
 
   @IsString()
   @IsOptional()
@@ -57,6 +59,7 @@ export class IngestSearchDto {
   @IsOptional()
   sort?: string;
 
+  @ArrayMinSize(1)
   @IsArray()
   @ValidateNested({ each: true })
   @Type(() => SearchVideoItem)

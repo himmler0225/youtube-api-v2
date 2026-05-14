@@ -6,7 +6,7 @@ import { AppLogger } from "@/base/logger/app-logger.service";
 
 @Injectable()
 export class RedisService implements OnModuleInit, OnModuleDestroy {
-  private client: Redis;
+  private client!: Redis;
 
   constructor(
     private readonly config: ConfigService,
@@ -30,6 +30,10 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
 
   async onModuleDestroy() {
     await this.client.quit();
+  }
+
+  async ping(): Promise<void> {
+    await this.client.ping();
   }
 
   async get<T>(key: string): Promise<T | null> {

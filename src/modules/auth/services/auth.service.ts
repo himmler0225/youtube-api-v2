@@ -5,6 +5,7 @@ import { createHmac, randomBytes, randomUUID, timingSafeEqual } from "crypto";
 import { JwtService } from "@nestjs/jwt";
 import { ConfigService } from "@nestjs/config";
 
+import { Prisma, User } from "@generated/prisma/client";
 import { RegisterDto, LoginDto, RefreshDto } from "@/modules/auth/dto";
 import { UserRepository } from "@/modules/auth/repositories/user.repository";
 import { AppException } from "@/base/errors/app.exception";
@@ -19,11 +20,23 @@ import {
 } from "@generated/prisma/enums";
 import {
   REFRESH_TOKEN_TTL_MS,
+  MAX_SESSIONS_PER_USER,
+  PASSWORD_ALGO,
   IDENTIFIER_FAIL_LIMIT,
   IDENTIFIER_FAIL_WINDOW_MS,
   IP_FAIL_LIMIT,
   IP_FAIL_WINDOW_MS,
-} from "@/modules/auth/auth.constants";
+} from "@/modules/auth/constants";
+
+type SessionUserInfo = {
+  id: string;
+  username: string;
+  email: string | null;
+  phone: string | null;
+  status: UserStatus;
+  tokenVersion: number;
+  createdAt: Date;
+};
 
 @Injectable()
 export class AuthService {
@@ -75,16 +88,42 @@ export class AuthService {
 
     const passwordHash = await argon2.hash(password);
 
-    const user = await this.userRepo.create({
-      username,
-      email,
-      phone,
-      passwordHash,
-      passwordAlgo: "argon2id-v1",
-    });
+    let user: User;
+    try {
+      user = await this.userRepo.create({
+        username,
+        email,
+        phone,
+        passwordHash,
+        passwordAlgo: PASSWORD_ALGO,
+      });
+    } catch (e) {
+      if (
+        e instanceof Prisma.PrismaClientKnownRequestError &&
+        e.code === "P2002"
+      ) {
+        const target = e.meta?.target as string[] | undefined;
+        if (target?.includes("username"))
+          throw new AppException(
+            { code: ErrorCode.USERNAME_TAKEN },
+            HttpStatus.CONFLICT,
+          );
+        if (target?.includes("email"))
+          throw new AppException(
+            { code: ErrorCode.EMAIL_TAKEN },
+            HttpStatus.CONFLICT,
+          );
+        if (target?.includes("phone"))
+          throw new AppException(
+            { code: ErrorCode.PHONE_TAKEN },
+            HttpStatus.CONFLICT,
+          );
+      }
+      throw e;
+    }
 
     this.logger.info("User registered", { userId: user.id, username });
-    return this.createSession(user.id, deviceId, deviceName, req);
+    return this.createSession(user, deviceId, deviceName, req);
   }
 
   // ── Login ───────────────────────────────────────────────────────────────────
@@ -92,8 +131,10 @@ export class AuthService {
   async login(payload: LoginDto, req: Request) {
     const { identifier, password, deviceId, deviceName } = payload;
 
-    const ipHash = this.hashData(req.ip ?? "unknown");
-    const uaHash = this.hashData(req.headers["user-agent"] ?? "unknown");
+    const ip = req.ip;
+    const ua = req.headers["user-agent"];
+    const ipHash = this.hashData(ip ?? "unknown");
+    const uaHash = this.hashData(ua ?? "unknown");
 
     // Per-identifier brute-force (DB, persists across restarts)
     const identifierFails = await this.prisma.loginAttempt.count({
@@ -122,6 +163,14 @@ export class AuthService {
       IP_FAIL_WINDOW_MS,
     );
     if (ipFails >= IP_FAIL_LIMIT) {
+      await this.recordLoginAttempt(
+        null,
+        identifier,
+        ipHash,
+        uaHash,
+        false,
+        "ip_rate_limited",
+      );
       throw AppException.rateLimited();
     }
 
@@ -199,7 +248,7 @@ export class AuthService {
       null,
     );
     this.logger.info("User logged in", { userId: user.id, identifier });
-    return this.createSession(user.id, deviceId, deviceName, req);
+    return this.createSession(user, deviceId, deviceName, req);
   }
 
   // ── Refresh ─────────────────────────────────────────────────────────────────
@@ -207,9 +256,18 @@ export class AuthService {
   async refresh(payload: RefreshDto, req: Request) {
     const { refreshToken, deviceId } = payload;
 
+    // Order by createdAt desc — get the most recent active session for this device
     const session = await this.prisma.authSession.findFirst({
       where: { deviceId, status: SessionStatus.ACTIVE },
-      include: { user: true },
+      select: {
+        id: true,
+        userId: true,
+        refreshTokenHash: true,
+        refreshTokenFamily: true,
+        refreshExpiresAt: true,
+        user: { select: { status: true, tokenVersion: true } },
+      },
+      orderBy: { createdAt: "desc" },
     });
 
     if (!session) {
@@ -219,8 +277,9 @@ export class AuthService {
       );
     }
 
+    const ua = req.headers["user-agent"];
     const ipHash = this.hashData(req.ip ?? "unknown");
-    const uaHash = this.hashData(req.headers["user-agent"] ?? "unknown");
+    const uaHash = this.hashData(ua ?? "unknown");
 
     // Timing-safe comparison — prevents timing attacks on token hash comparison
     const incomingHash = this.hashData(refreshToken);
@@ -262,10 +321,17 @@ export class AuthService {
       );
     }
 
-    if (session.user.status !== UserStatus.ACTIVE) {
+    // Separate BANNED vs DELETED — each gets the correct error
+    if (session.user.status === UserStatus.BANNED) {
       throw new AppException(
         { code: ErrorCode.ACCOUNT_BANNED },
         HttpStatus.FORBIDDEN,
+      );
+    }
+    if (session.user.status !== UserStatus.ACTIVE) {
+      throw new AppException(
+        { code: ErrorCode.UNAUTHORIZED },
+        HttpStatus.UNAUTHORIZED,
       );
     }
 
@@ -313,6 +379,8 @@ export class AuthService {
         "email",
         "phone",
         "status",
+        "emailVerifiedAt",
+        "phoneVerifiedAt",
         "createdAt",
         "updatedAt",
       ],
@@ -334,13 +402,58 @@ export class AuthService {
         lastSeenAt: true,
         refreshExpiresAt: true,
       },
-      orderBy: { createdAt: "desc" },
+      // Most recently active first; fall back to createdAt for sessions never refreshed
+      orderBy: [
+        { lastSeenAt: { sort: "desc", nulls: "last" } },
+        { createdAt: "desc" },
+      ],
     });
 
     return sessions.map((s) => ({
       ...s,
       isCurrent: s.id === currentSessionId,
     }));
+  }
+
+  // ── Revoke Session ──────────────────────────────────────────────────────────
+
+  async revokeSession(
+    userId: string,
+    currentSessionId: string,
+    targetSessionId: string,
+    req: Request,
+  ) {
+    if (targetSessionId === currentSessionId) {
+      throw AppException.badRequest(
+        "Use POST /auth/logout to revoke the current session",
+      );
+    }
+
+    const session = await this.prisma.authSession.findFirst({
+      where: { id: targetSessionId, userId, status: SessionStatus.ACTIVE },
+      select: { id: true },
+    });
+
+    if (!session) throw AppException.notFound("Session not found");
+
+    await this.prisma.authSession.update({
+      where: { id: targetSessionId },
+      data: { status: SessionStatus.REVOKED, revokedAt: new Date() },
+    });
+
+    const ua = req.headers["user-agent"];
+    await this.prisma.auditLog.create({
+      data: {
+        userId,
+        event: AuthEventType.SESSION_REVOKED,
+        sessionId: targetSessionId,
+        ipHash: this.hashData(req.ip ?? "unknown"),
+        uaHash: this.hashData(ua ?? "unknown"),
+      },
+    });
+
+    this.logger.info("Session revoked", { userId, targetSessionId });
+    return { success: true };
   }
 
   // ── Logout ──────────────────────────────────────────────────────────────────
@@ -354,6 +467,7 @@ export class AuthService {
   ) {
     const session = await this.prisma.authSession.findFirst({
       where: { id: sessionId, userId, status: SessionStatus.ACTIVE },
+      select: { id: true },
     });
 
     if (!session) {
@@ -374,13 +488,14 @@ export class AuthService {
       await this.redis.set(`jti:${jti}`, 1, ttl);
     }
 
+    const ua = req.headers["user-agent"];
     await this.prisma.auditLog.create({
       data: {
         userId,
         event: AuthEventType.LOGOUT,
         sessionId,
         ipHash: this.hashData(req.ip ?? "unknown"),
-        uaHash: this.hashData(req.headers["user-agent"] ?? "unknown"),
+        uaHash: this.hashData(ua ?? "unknown"),
       },
     });
 
@@ -391,19 +506,21 @@ export class AuthService {
   // ── Logout All ───────────────────────────────────────────────────────────────
 
   async logoutAll(userId: string, sessionId: string, req: Request) {
-    // Increment tokenVersion — invalidates ALL existing access tokens immediately
-    await this.prisma.user.update({
-      where: { id: userId },
-      data: { tokenVersion: { increment: 1 } },
+    // Single transaction — tokenVersion increment + session revoke must be atomic
+    await this.prisma.$transaction(async (tx) => {
+      await tx.user.update({
+        where: { id: userId },
+        data: { tokenVersion: { increment: 1 } },
+      });
+      await tx.authSession.updateMany({
+        where: { userId, status: SessionStatus.ACTIVE },
+        data: { status: SessionStatus.REVOKED, revokedAt: new Date() },
+      });
     });
 
-    await this.prisma.authSession.updateMany({
-      where: { userId, status: SessionStatus.ACTIVE },
-      data: { status: SessionStatus.REVOKED, revokedAt: new Date() },
-    });
-
+    const ua = req.headers["user-agent"];
     const ipHash = this.hashData(req.ip ?? "unknown");
-    const uaHash = this.hashData(req.headers["user-agent"] ?? "unknown");
+    const uaHash = this.hashData(ua ?? "unknown");
 
     await this.prisma.auditLog.create({
       data: {
@@ -462,8 +579,9 @@ export class AuthService {
       }),
     ]);
 
+    const ua = req.headers["user-agent"];
     const ipHash = this.hashData(req.ip ?? "unknown");
-    const uaHash = this.hashData(req.headers["user-agent"] ?? "unknown");
+    const uaHash = this.hashData(ua ?? "unknown");
 
     await this.prisma.auditLog.create({
       data: {
@@ -482,37 +600,25 @@ export class AuthService {
   // ── Private ─────────────────────────────────────────────────────────────────
 
   private async createSession(
-    userId: string,
+    user: SessionUserInfo,
     deviceId: string,
     deviceName: string | undefined,
     req: Request,
   ) {
-    const dbUser = await this.prisma.user.findUniqueOrThrow({
-      where: { id: userId },
-      select: {
-        id: true,
-        username: true,
-        email: true,
-        phone: true,
-        status: true,
-        tokenVersion: true,
-        createdAt: true,
-      },
-    });
-
     const sessionId = randomUUID();
     const refreshToken = randomBytes(32).toString("hex");
     const refreshTokenFamily = randomUUID();
     const jti = randomUUID();
 
+    const ua = req.headers["user-agent"];
     const refreshTokenHash = this.hashData(refreshToken);
     const ipHash = this.hashData(req.ip ?? "unknown");
-    const userAgentHash = this.hashData(req.headers["user-agent"] ?? "unknown");
+    const userAgentHash = this.hashData(ua ?? "unknown");
 
     await this.prisma.authSession.create({
       data: {
         id: sessionId,
-        userId,
+        userId: user.id,
         deviceId,
         deviceName,
         refreshTokenHash,
@@ -523,16 +629,31 @@ export class AuthService {
       },
     });
 
+    // Enforce per-user session cap — revoke oldest if over limit
+    const activeSessions = await this.prisma.authSession.findMany({
+      where: { userId: user.id, status: SessionStatus.ACTIVE },
+      select: { id: true },
+      orderBy: { createdAt: "asc" },
+    });
+    if (activeSessions.length > MAX_SESSIONS_PER_USER) {
+      const overflow = activeSessions.length - MAX_SESSIONS_PER_USER;
+      const toRevoke = activeSessions.slice(0, overflow).map((s) => s.id);
+      await this.prisma.authSession.updateMany({
+        where: { id: { in: toRevoke } },
+        data: { status: SessionStatus.REVOKED, revokedAt: new Date() },
+      });
+    }
+
     const accessToken = this.jwt.sign({
-      userId,
+      userId: user.id,
       sessionId,
-      v: dbUser.tokenVersion,
+      v: user.tokenVersion,
       jti,
     });
 
     await this.prisma.auditLog.create({
       data: {
-        userId,
+        userId: user.id,
         event: AuthEventType.LOGIN_SUCCESS,
         sessionId,
         ipHash,
@@ -540,17 +661,24 @@ export class AuthService {
       },
     });
 
-    this.logger.info("Session created", { userId, sessionId, deviceId });
+    this.logger.info("Session created", {
+      userId: user.id,
+      sessionId,
+      deviceId,
+    });
 
-    const user = {
-      id: dbUser.id,
-      username: dbUser.username,
-      email: dbUser.email,
-      phone: dbUser.phone,
-      status: dbUser.status,
-      createdAt: dbUser.createdAt,
+    return {
+      accessToken,
+      refreshToken,
+      user: {
+        id: user.id,
+        username: user.username,
+        email: user.email,
+        phone: user.phone,
+        status: user.status,
+        createdAt: user.createdAt,
+      },
     };
-    return { accessToken, refreshToken, user };
   }
 
   private async recordLoginAttempt(

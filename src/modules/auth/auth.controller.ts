@@ -1,4 +1,14 @@
-import { Body, Controller, Get, Post, Req, UseGuards } from "@nestjs/common";
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  Param,
+  ParseUUIDPipe,
+  Post,
+  Req,
+  UseGuards,
+} from "@nestjs/common";
 import {
   ApiBearerAuth,
   ApiOperation,
@@ -13,6 +23,7 @@ import {
   AuthResponseDto,
   RefreshResponseDto,
   SessionDto,
+  SuccessResponseDto,
   UserResponseDto,
 } from "./dto/auth-response.dto";
 import { JwtAuthGuard } from "./guards/jwt-auth.guard";
@@ -68,7 +79,7 @@ export class AuthController {
   }
 
   @ApiOperation({ summary: "Logout and revoke current session" })
-  @ApiResponse({ status: 200 })
+  @ApiResponse({ status: 200, type: SuccessResponseDto })
   @ApiBearerAuth("JWT-auth")
   @UseGuards(JwtAuthGuard)
   @Post("logout")
@@ -83,8 +94,23 @@ export class AuthController {
     );
   }
 
+  @ApiOperation({ summary: "Revoke a specific session by ID" })
+  @ApiResponse({ status: 200, type: SuccessResponseDto })
+  @ApiBearerAuth("JWT-auth")
+  @UseGuards(JwtAuthGuard)
+  @Delete("sessions/:id")
+  revokeSession(@Param("id", ParseUUIDPipe) id: string, @Req() req: Request) {
+    const jwtUser = req.user as JwtUser;
+    return this.authService.revokeSession(
+      jwtUser.userId,
+      jwtUser.sessionId,
+      id,
+      req,
+    );
+  }
+
   @ApiOperation({ summary: "Revoke all sessions and invalidate all tokens" })
-  @ApiResponse({ status: 200 })
+  @ApiResponse({ status: 200, type: SuccessResponseDto })
   @ApiBearerAuth("JWT-auth")
   @UseGuards(JwtAuthGuard)
   @Post("logout-all")
@@ -94,7 +120,7 @@ export class AuthController {
   }
 
   @ApiOperation({ summary: "Change password and revoke all existing sessions" })
-  @ApiResponse({ status: 200 })
+  @ApiResponse({ status: 200, type: SuccessResponseDto })
   @ApiBearerAuth("JWT-auth")
   @UseGuards(JwtAuthGuard)
   @Throttle({ default: { limit: 3, ttl: 60000 } })

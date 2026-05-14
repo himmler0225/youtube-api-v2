@@ -3,6 +3,7 @@ import {
   IsNotEmpty,
   IsOptional,
   IsString,
+  IsUUID,
   MaxLength,
   MinLength,
   Matches,
@@ -55,11 +56,10 @@ export class RegisterDto {
   password!: string;
 
   @ApiProperty({
-    description: "Unique device identifier (UUID)",
+    description: "Unique device identifier (UUID v4)",
     example: "550e8400-e29b-41d4-a716-446655440000",
   })
-  @IsString()
-  @IsNotEmpty()
+  @IsUUID("4")
   deviceId!: string;
 
   @ApiPropertyOptional({

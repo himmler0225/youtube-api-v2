@@ -2,7 +2,8 @@
  * VideoService — pattern nhất quán cho tất cả endpoints:
  *   DB first → miss/live → crawl → lưu DB → trả về
  */
-import { Injectable, NotFoundException } from "@nestjs/common";
+import { Injectable } from "@nestjs/common";
+import { AppException } from "@/base/errors/app.exception";
 import { PrismaService } from "@/modules/prisma/prisma.service";
 import { RedisService } from "@/modules/redis/redis.service";
 import {
@@ -11,10 +12,12 @@ import {
   CrawlerVideoDetail,
   CrawlerVideoResult,
 } from "@/modules/crawler-client/crawler-client.service";
+import type { CrawlerShort } from "@/modules/crawler-client/types";
 import { AppLogger } from "@/base/logger/app-logger.service";
+import { ElasticService } from "../elastic/elastic.service";
 
-const LIVE_VIDEO_TTL = 60; // giây
-const LIVE_SEARCH_TTL = 30; // giây
+const LIVE_VIDEO_TTL = 60; // seconds
+const LIVE_SEARCH_TTL = 30; // seconds
 
 @Injectable()
 export class VideoService {
@@ -23,9 +26,8 @@ export class VideoService {
     private readonly redis: RedisService,
     private readonly crawler: CrawlerClientService,
     private readonly logger: AppLogger,
+    private readonly elastic: ElasticService,
   ) {}
-
-  // ── Video detail ──────────────────────────────────────────────────────────
 
   async findOne(videoId: string) {
     const cached = await this.redis.get<object>(`video:live:${videoId}`);
@@ -41,8 +43,6 @@ export class VideoService {
     return this._saveVideoDetail(videoId, result);
   }
 
-  // ── Comments ──────────────────────────────────────────────────────────────
-
   async getComments(videoId: string, page = 1, limit = 30) {
     const skip = (page - 1) * limit;
 
@@ -50,7 +50,6 @@ export class VideoService {
       where: { videoId, parentId: null },
     });
 
-    // Có trong DB → trả về từ DB (phân trang)
     if (dbCount > 0) {
       const comments = await this.prisma.comment.findMany({
         where: { videoId, parentId: null },
@@ -62,7 +61,6 @@ export class VideoService {
       return { videoId, total: dbCount, page, limit, comments };
     }
 
-    // Chưa có → crawl → lưu DB → trả trang đầu
     this.logger.info("Fetching comments from crawler", { videoId });
     const crawled = await this.crawler.getComments(videoId, 1, 100);
     await this._saveComments(videoId, crawled);
@@ -77,58 +75,38 @@ export class VideoService {
     return { videoId, total: crawled.length, page, limit, comments };
   }
 
-  // ── List / Search ─────────────────────────────────────────────────────────
-
   async listVideos(query?: string, page = 1, limit = 20) {
     const offset = (page - 1) * limit;
 
-    // Full-text search via tsvector when query is provided
     if (query) {
-      type VideoRow = {
-        id: string;
-        title: string;
-        channelId: string | null;
-        channelName: string | null;
-        viewsText: string | null;
-        durationText: string | null;
-        publishedTimeText: string | null;
-        viewCount: bigint | null;
-        durationSeconds: number | null;
-        isLiveContent: boolean;
-        descriptionSnippet: string | null;
-        thumbnails: unknown;
-        isAvailable: boolean;
-        unavailableReason: string | null;
-        detailCrawledAt: Date | null;
-        crawledAt: Date;
-        updatedAt: Date;
-      };
-      type CountRow = { count: bigint };
+      const es = this.elastic.getClient();
+      const res = await es.search({
+        index: "videos",
+        from: offset,
+        size: limit,
+        query: {
+          multi_match: {
+            query,
+            fields: ["title^3", "channelName", "description"],
+            fuzziness: "AUTO",
+          },
+        },
+      });
 
-      const [videos, countRows] = await Promise.all([
-        this.prisma.$queryRaw<VideoRow[]>`
-          SELECT * FROM "Video"
-          WHERE "isAvailable" = true
-            AND tsv @@ plainto_tsquery('simple', ${query})
-          ORDER BY ts_rank(tsv, plainto_tsquery('simple', ${query})) DESC
-          LIMIT ${limit} OFFSET ${offset}
-        `,
-        this.prisma.$queryRaw<CountRow[]>`
-          SELECT COUNT(*) AS count FROM "Video"
-          WHERE "isAvailable" = true
-            AND tsv @@ plainto_tsquery('simple', ${query})
-        `,
-      ]);
+      const hits = res.hits.hits;
+      const total =
+        typeof res.hits.total === "number"
+          ? res.hits.total
+          : (res.hits.total?.value ?? 0);
 
       return {
-        total: Number(countRows[0]?.count ?? 0),
+        total,
         page,
         limit,
-        videos,
+        videos: hits.map((h) => h._source),
       };
     }
 
-    // No query — regular paginated list ordered by crawl time
     const [videos, total] = await Promise.all([
       this.prisma.video.findMany({
         where: { isAvailable: true },
@@ -142,7 +120,55 @@ export class VideoService {
     return { total, page, limit, videos };
   }
 
-  // ── Live search ───────────────────────────────────────────────────────────
+  async getShorts(page = 1, limit = 30) {
+    const offset = (page - 1) * limit;
+
+    const dbCount = await this.prisma.video.count({ where: { isShort: true } });
+
+    if (dbCount >= 10) {
+      const videos = await this.prisma.video.findMany({
+        where: { isShort: true, isAvailable: true },
+        skip: offset,
+        take: limit,
+        orderBy: { crawledAt: "desc" },
+      });
+      return { total: dbCount, page, limit, videos };
+    }
+
+    this.logger.info("Fetching shorts from crawler");
+    const crawled: CrawlerShort[] = await this.crawler.getShorts(50);
+
+    for (const s of crawled) {
+      if (!s.video_id) continue;
+      await this.prisma.video.upsert({
+        where: { id: s.video_id },
+        create: {
+          id: s.video_id,
+          title: s.title || s.video_id,
+          channelName: s.channel_name || null,
+          viewCount: s.view_count ? BigInt(s.view_count) : null,
+          thumbnails: s.thumbnails ?? [],
+          isShort: true,
+          isAvailable: true,
+        },
+        update: {
+          title: s.title || s.video_id,
+          channelName: s.channel_name || null,
+          viewCount: s.view_count ? BigInt(s.view_count) : null,
+          thumbnails: s.thumbnails ?? [],
+          isShort: true,
+        },
+      });
+    }
+
+    const videos = await this.prisma.video.findMany({
+      where: { isShort: true, isAvailable: true },
+      skip: offset,
+      take: limit,
+      orderBy: { crawledAt: "desc" },
+    });
+    return { total: crawled.length, page, limit, videos };
+  }
 
   async searchLive(query: string, page = 1, limit = 30) {
     const cacheKey = `live:search:${query}:${page}:${limit}`;
@@ -153,8 +179,6 @@ export class VideoService {
     await this.redis.set(cacheKey, videos, LIVE_SEARCH_TTL);
     return { videos, fromCache: false };
   }
-
-  // ── Private helpers ───────────────────────────────────────────────────────
 
   private async _saveVideoDetail(videoId: string, result: CrawlerVideoResult) {
     if ("error" in result && result.error) {
@@ -168,7 +192,9 @@ export class VideoService {
         },
         update: { isAvailable: false, unavailableReason: result.reason },
       });
-      throw new NotFoundException({ videoId, reason: result.reason });
+      throw AppException.notFound(
+        `Video ${videoId} not found: ${result.reason}`,
+      );
     }
 
     const d = result as CrawlerVideoDetail;

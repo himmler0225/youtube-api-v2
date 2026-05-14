@@ -17,7 +17,7 @@ export class VideoRepository extends BasePrismaRepository<Video> {
     title: string;
     channelId?: string | null;
     channelName?: string | null;
-    viewsText?: string | null;
+    viewCount?: bigint | null;
     durationText?: string | null;
     publishedTimeText?: string | null;
     descriptionSnippet?: string | null;
@@ -30,12 +30,12 @@ export class VideoRepository extends BasePrismaRepository<Video> {
         ...data,
         thumbnails: data.thumbnails ?? Prisma.JsonNull,
       },
-      // Không ghi đè viewCount/durationSeconds (chính xác hơn, từ detail)
+      // Không ghi đè durationSeconds (chính xác hơn, từ detail)
       update: {
         title: data.title,
         channelId: data.channelId,
         channelName: data.channelName,
-        viewsText: data.viewsText,
+        viewCount: data.viewCount,
         durationText: data.durationText,
         publishedTimeText: data.publishedTimeText,
         descriptionSnippet: data.descriptionSnippet,

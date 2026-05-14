@@ -31,7 +31,6 @@ export class CrawlDetailProcessor extends WorkerHost {
     const { videoId } = job.data;
     this.logger.info("[CrawlWorker] Processing video detail", { videoId });
 
-    // 1. Crawl detail
     const result = await this.crawler.getVideoDetail(videoId);
 
     if ("error" in result && result.error) {

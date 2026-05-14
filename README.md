@@ -32,7 +32,7 @@ youtube-crawler
 | `QueueModule` | Global — BullMQ trên Redis, export `QueueService` |
 | `AuthModule` | Đăng ký / đăng nhập / refresh / logout, session management |
 | `IngestModule` | Nhận batch data từ crawler, lưu DB, push video_id vào queue |
-| `VideoModule` | Public endpoints: list, trending, live, detail, comments |
+| `VideoModule` | Public endpoints: list, search, trending, live, shorts, detail, comments |
 | `CrawlWorkerModule` | BullMQ processor — tự crawl detail + comments sau ingest |
 
 ### Base infrastructure (`src/base/`)
@@ -63,9 +63,10 @@ youtube-crawler
 
 | Method | Path | Query | Mô tả |
 |--------|------|-------|-------|
-| GET | `/videos` | `q`, `page`, `limit` | Danh sách — FTS khi có `q` |
+| GET | `/videos` | `q`, `page`, `limit` | Danh sách — Elasticsearch khi có `q` |
 | GET | `/videos/trending` | `category`, `page`, `limit` | Trending snapshot mới nhất |
 | GET | `/videos/live` | `q`, `page`, `limit` | Live search real-time từ crawler (cache 30s) |
+| GET | `/videos/shorts` | `page`, `limit` | Shorts feed — DB first, miss → crawler |
 | GET | `/videos/:id` | — | DB first, miss/live → crawler (live cache 60s) |
 | GET | `/videos/:id/comments` | `page`, `limit` | DB first, miss → crawl → lưu → paginate |
 
@@ -94,25 +95,26 @@ Job dùng `jobId = videoId` — dedup tự động khi video đã trong queue.
 
 ---
 
-## Full-Text Search
+## Search
 
-Migration `prisma/migrations/20260301120000_add_video_fts`:
-- Column `tsv tsvector` + GIN index trên bảng `Video`
-- Trigger tự sync khi thay đổi `title`, `channelName`, `descriptionSnippet`
-- `GET /videos?q=keyword` dùng `plainto_tsquery('simple', ?)` + rank `ts_rank`
+`GET /videos?q=keyword` dùng Elasticsearch (`multi_match` với `title^3`, `channelName`, `description`, fuzziness `AUTO`).
+
+Không có `q` → Prisma `findMany` sắp xếp theo `crawledAt desc`.
 
 ---
 
 ## Database schema
 
-```
-User ──┬── AuthSession
-       ├── AuditLog
-       └── LoginAttempt
+Tables dùng snake_case (`@@map`). TypeScript code giữ camelCase qua `@map`.
 
-Channel ──── Video ──┬── TrendingSnapshot
-                     ├── SearchResult
-                     └── Comment (self-relation replies)
+```
+users ──┬── auth_sessions
+        ├── audit_logs
+        └── login_attempts
+
+channels ──── videos ──┬── trending_snapshots
+                       ├── search_results
+                       └── comments (self-relation replies)
 ```
 
 ---
@@ -123,18 +125,35 @@ Channel ──── Video ──┬── TrendingSnapshot
 PORT=3000
 NODE_ENV=development
 
-DATABASE_URL=postgresql://user:pass@localhost:5432/youtube
+# PostgreSQL
+DATABASE_URL=postgresql://user:pass@host:6543/db?pgbouncer=true   # pgbouncer (runtime)
+DIRECT_URL=postgresql://user:pass@host:5432/db                     # direct (migrations)
 
+# Redis
 REDIS_HOST=localhost
 REDIS_PORT=6379
 REDIS_DB=0
 
+# JWT
 JWT_SECRET=
-JWT_EXPIRES_IN=7d
+JWT_EXPIRES_IN=15m
+JWT_REFRESH_SECRET=
+JWT_REFRESH_EXPIRES_IN=7d
 
-INTERNAL_SERVICE_KEY=      # guard cho /internal/ingest/*
+# Security
+PEPPER=                     # HMAC pepper cho password hash
+
+# Internal service auth
+INTERNAL_SERVICE_KEY=       # guard cho /internal/ingest/*
+
+# Crawler
 CRAWLER_URL=http://localhost:8000
 CRAWLER_API_KEY=
+
+# Elasticsearch
+ELASTIC_NODE=http://localhost:9200
+ELASTIC_USERNAME=
+ELASTIC_PASSWORD=
 ```
 
 ---

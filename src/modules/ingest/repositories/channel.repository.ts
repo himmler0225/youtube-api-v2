@@ -11,7 +11,6 @@ export class ChannelRepository extends BasePrismaRepository<Channel> {
     super(prisma.channel);
   }
 
-  // Upsert — tạo mới nếu chưa có, cập nhật nếu đã có
   upsert(data: {
     id: string;
     name: string;

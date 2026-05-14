@@ -1,3 +1,4 @@
+export * from "./dto/pagination.dto";
 export * from "./errors/error-code";
 export * from "./errors/error-messages";
 export * from "./errors/app.exception";

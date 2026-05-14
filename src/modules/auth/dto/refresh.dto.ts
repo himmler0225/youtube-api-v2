@@ -1,4 +1,4 @@
-import { IsNotEmpty, IsString } from "class-validator";
+import { IsNotEmpty, IsString, IsUUID } from "class-validator";
 import { ApiProperty } from "@nestjs/swagger";
 
 export class RefreshDto {
@@ -12,10 +12,9 @@ export class RefreshDto {
 
   @ApiProperty({
     description:
-      "Unique device identifier (must match the one used during login)",
+      "Unique device identifier (UUID v4, must match the one used during login)",
     example: "550e8400-e29b-41d4-a716-446655440000",
   })
-  @IsString()
-  @IsNotEmpty()
+  @IsUUID("4")
   deviceId!: string;
 }

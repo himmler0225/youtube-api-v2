@@ -11,6 +11,21 @@ async function bootstrap() {
   const logger = app.get(AppLogger);
   app.useLogger(logger);
 
+  app.enableCors({
+    origin: ["http://localhost:8080", "http://127.0.0.1:8080"],
+    credentials: true,
+  });
+
+  // BigInt serialization: Express's json replacer — dùng thay BigInt.prototype.toJSON
+  // vì JSON.stringify throw trước khi gọi toJSON cho BigInt primitives.
+  // viewCount YouTube tối đa ~10B < Number.MAX_SAFE_INTEGER (9×10¹⁵) nên Number an toàn.
+  const expressApp = app.getHttpAdapter().getInstance() as {
+    set: (key: string, value: unknown) => void;
+  };
+  expressApp.set("json replacer", (_key: string, value: unknown) =>
+    typeof value === "bigint" ? Number(value) : value,
+  );
+
   app.use(helmet());
 
   app.useGlobalPipes(

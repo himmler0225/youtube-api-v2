@@ -1,4 +1,4 @@
-import { IsNotEmpty, IsOptional, IsString } from "class-validator";
+import { IsNotEmpty, IsOptional, IsString, IsUUID } from "class-validator";
 import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
 
 export class LoginDto {
@@ -19,11 +19,10 @@ export class LoginDto {
   password!: string;
 
   @ApiProperty({
-    description: "Unique device identifier (UUID)",
+    description: "Unique device identifier (UUID v4)",
     example: "550e8400-e29b-41d4-a716-446655440000",
   })
-  @IsString()
-  @IsNotEmpty()
+  @IsUUID("4")
   deviceId!: string;
 
   @ApiPropertyOptional({

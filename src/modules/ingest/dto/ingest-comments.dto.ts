@@ -1,4 +1,5 @@
 import {
+  ArrayMinSize,
   IsArray,
   IsNotEmpty,
   IsNumber,
@@ -69,6 +70,7 @@ export class IngestCommentsDto {
   @IsNotEmpty()
   video_id: string;
 
+  @ArrayMinSize(1)
   @IsArray()
   @ValidateNested({ each: true })
   @Type(() => CommentItem)

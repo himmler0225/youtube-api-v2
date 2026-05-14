@@ -12,6 +12,7 @@ import { VideoModule } from "./modules/video/video.module";
 import { QueueModule } from "./modules/queue/queue.module";
 import { CrawlWorkerModule } from "./modules/crawl-worker/crawl-worker.module";
 import { HealthModule } from "./modules/health/health.module";
+import { ElasticModule } from "./modules/elastic/elastic.module";
 
 @Module({
   imports: [
@@ -19,6 +20,7 @@ import { HealthModule } from "./modules/health/health.module";
     ThrottlerModule.forRoot([{ ttl: 60000, limit: 200 }]),
     PrismaModule,
     RedisModule,
+    ElasticModule,
     CrawlerClientModule,
     QueueModule,
     AuthModule,
