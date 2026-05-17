@@ -11,7 +11,7 @@ import { Type } from "class-transformer";
 
 export class SearchVideoItem {
   @IsString()
-  video_id: string;
+  videoId!: string;
 
   @IsString()
   @IsOptional()
@@ -19,7 +19,7 @@ export class SearchVideoItem {
 
   @IsString()
   @IsOptional()
-  channel_id?: string;
+  channelId?: string;
 
   @IsString()
   @IsOptional()
@@ -27,7 +27,7 @@ export class SearchVideoItem {
 
   @IsNumber()
   @IsOptional()
-  view_count?: number;
+  viewCount?: number;
 
   @IsString()
   @IsOptional()
@@ -35,11 +35,11 @@ export class SearchVideoItem {
 
   @IsString()
   @IsOptional()
-  published_time?: string;
+  publishedTime?: string;
 
   @IsString()
   @IsOptional()
-  description_snippet?: string;
+  descriptionSnippet?: string;
 
   @IsString()
   @IsOptional()
@@ -53,7 +53,7 @@ export class SearchVideoItem {
 export class IngestSearchDto {
   @IsString()
   @IsNotEmpty()
-  query: string;
+  query!: string;
 
   @IsString()
   @IsOptional()
@@ -63,5 +63,5 @@ export class IngestSearchDto {
   @IsArray()
   @ValidateNested({ each: true })
   @Type(() => SearchVideoItem)
-  videos: SearchVideoItem[];
+  videos!: SearchVideoItem[];
 }

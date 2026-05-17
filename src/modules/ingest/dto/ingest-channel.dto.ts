@@ -3,11 +3,11 @@ import { IsOptional, IsString, IsNotEmpty } from "class-validator";
 export class IngestChannelDto {
   @IsString()
   @IsNotEmpty()
-  channel_id: string;
+  channelId!: string;
 
   @IsString()
   @IsNotEmpty()
-  channel_name: string;
+  channelName!: string;
 
   @IsString()
   @IsOptional()
@@ -23,7 +23,7 @@ export class IngestChannelDto {
 
   @IsString()
   @IsOptional()
-  subscriber_count?: string;
+  subscriberCount?: string;
 
   @IsString()
   @IsOptional()

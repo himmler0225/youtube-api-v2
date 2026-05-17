@@ -14,7 +14,6 @@ import { AppLogger } from "@/base/logger/app-logger.service";
 
 @Module({
   imports: [
-    // Re-register queue name trong module này để processor bind đúng queue
     BullModule.registerQueue({ name: CRAWL_DETAIL_QUEUE }),
     IngestModule,
   ],

@@ -3,14 +3,13 @@ import {
   IsArray,
   IsInt,
   IsNotEmpty,
-  IsNumber,
   IsOptional,
   IsString,
   ValidateNested,
 } from "class-validator";
 import { Type } from "class-transformer";
 
-export class ShortVideoItem {
+export class ChannelVideoItem {
   @IsString()
   @IsNotEmpty()
   videoId!: string;
@@ -19,31 +18,35 @@ export class ShortVideoItem {
   @IsOptional()
   title?: string;
 
-  @IsString()
-  @IsOptional()
-  channelId?: string;
-
-  @IsString()
-  @IsOptional()
-  channelName?: string;
-
-  @IsNumber()
+  @IsInt()
   @IsOptional()
   viewCount?: number;
 
-  @IsInt()
+  @IsString()
   @IsOptional()
-  duration?: number;
+  duration?: string;
+
+  @IsString()
+  @IsOptional()
+  publishedTime?: string;
 
   @IsArray()
   @IsOptional()
   thumbnails?: Record<string, unknown>[];
 }
 
-export class IngestShortsDto {
-  @ArrayMinSize(1)
+export class IngestChannelVideosDto {
+  @IsString()
+  @IsNotEmpty()
+  channelId!: string;
+
+  @IsString()
+  @IsOptional()
+  channelName?: string;
+
   @IsArray()
+  @ArrayMinSize(1)
   @ValidateNested({ each: true })
-  @Type(() => ShortVideoItem)
-  videos!: ShortVideoItem[];
+  @Type(() => ChannelVideoItem)
+  videos!: ChannelVideoItem[];
 }

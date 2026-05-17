@@ -9,6 +9,8 @@ import {
   IngestCommentsDto,
   IngestTrendingDto,
   IngestShortsDto,
+  IngestChannelVideosDto,
+  IngestPlaylistsDto,
 } from "./dto";
 
 @SkipThrottle()
@@ -45,5 +47,15 @@ export class IngestController {
   @Post("comments")
   ingestComments(@Body() dto: IngestCommentsDto) {
     return this.ingestService.ingestComments(dto);
+  }
+
+  @Post("channel-videos")
+  ingestChannelVideos(@Body() dto: IngestChannelVideosDto) {
+    return this.ingestService.ingestChannelVideos(dto);
+  }
+
+  @Post("playlists")
+  ingestPlaylists(@Body() dto: IngestPlaylistsDto) {
+    return this.ingestService.ingestPlaylists(dto);
   }
 }

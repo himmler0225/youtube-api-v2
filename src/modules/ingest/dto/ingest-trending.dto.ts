@@ -14,7 +14,7 @@ import { Type } from "class-transformer";
 export class TrendingVideoItem {
   @IsString()
   @IsNotEmpty()
-  video_id: string;
+  videoId!: string;
 
   @IsInt()
   @Min(1)
@@ -27,7 +27,7 @@ export class TrendingVideoItem {
 
   @IsString()
   @IsOptional()
-  channel_id?: string;
+  channelId?: string;
 
   @IsString()
   @IsOptional()
@@ -35,7 +35,7 @@ export class TrendingVideoItem {
 
   @IsNumber()
   @IsOptional()
-  view_count?: number;
+  viewCount?: number;
 
   @IsString()
   @IsOptional()
@@ -43,7 +43,7 @@ export class TrendingVideoItem {
 
   @IsString()
   @IsOptional()
-  published_time?: string;
+  publishedTime?: string;
 
   @IsArray()
   @IsOptional()
@@ -59,5 +59,5 @@ export class IngestTrendingDto {
   @IsArray()
   @ValidateNested({ each: true })
   @Type(() => TrendingVideoItem)
-  videos: TrendingVideoItem[];
+  videos!: TrendingVideoItem[];
 }

@@ -79,32 +79,49 @@ export class VideoService {
     const offset = (page - 1) * limit;
 
     if (query) {
-      const es = this.elastic.getClient();
-      const res = await es.search({
-        index: "videos",
-        from: offset,
-        size: limit,
-        query: {
-          multi_match: {
-            query,
-            fields: ["title^3", "channelName", "description"],
-            fuzziness: "AUTO",
+      try {
+        const es = this.elastic.getClient();
+        const res = await es.search({
+          index: "videos",
+          from: offset,
+          size: limit,
+          query: {
+            multi_match: {
+              query,
+              fields: ["title^3", "channelName", "description"],
+              fuzziness: "AUTO",
+            },
           },
-        },
+        });
+
+        const hits = res.hits.hits;
+        const total =
+          typeof res.hits.total === "number"
+            ? res.hits.total
+            : (res.hits.total?.value ?? 0);
+
+        if (hits.length > 0) {
+          return { total, page, limit, videos: hits.map((h) => h._source) };
+        }
+      } catch {
+        this.logger.warn("ES search failed — falling back to Postgres FTS", {
+          query,
+        });
+      }
+
+      // Fallback: Postgres full-text search
+      const rows = await this.prisma.$queryRaw<{ id: string }[]>`
+        SELECT id FROM videos
+        WHERE tsv @@ plainto_tsquery('simple', ${query})
+          AND is_available = true
+        ORDER BY ts_rank(tsv, plainto_tsquery('simple', ${query})) DESC
+        LIMIT ${limit} OFFSET ${offset}
+      `;
+      const ids = rows.map((r) => r.id);
+      const videos = await this.prisma.video.findMany({
+        where: { id: { in: ids } },
       });
-
-      const hits = res.hits.hits;
-      const total =
-        typeof res.hits.total === "number"
-          ? res.hits.total
-          : (res.hits.total?.value ?? 0);
-
-      return {
-        total,
-        page,
-        limit,
-        videos: hits.map((h) => h._source),
-      };
+      return { total: ids.length, page, limit, videos };
     }
 
     const [videos, total] = await Promise.all([
@@ -134,7 +151,15 @@ export class VideoService {
         take: limit,
         orderBy: { crawledAt: "desc" },
       });
-      return { total: dbCount, page, limit, shorts };
+      return {
+        total: dbCount,
+        page,
+        limit,
+        shorts: shorts.map((s) => ({
+          ...s,
+          url: `https://www.youtube.com/shorts/${s.id}`,
+        })),
+      };
     }
 
     this.logger.info("Fetching shorts from crawler");
@@ -167,7 +192,15 @@ export class VideoService {
       take: limit,
       orderBy: { crawledAt: "desc" },
     });
-    return { total: crawled.length, page, limit, shorts };
+    return {
+      total: crawled.length,
+      page,
+      limit,
+      shorts: shorts.map((s) => ({
+        ...s,
+        url: `https://www.youtube.com/shorts/${s.id}`,
+      })),
+    };
   }
 
   async searchLive(query: string, page = 1, limit = 30) {

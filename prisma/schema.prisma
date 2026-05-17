@@ -134,7 +134,7 @@ model AuditLog {
 // ==================== YouTube Data ====================
 
 model Channel {
-  id     String @id
+  id     String  @id
   name   String
   handle String?
   avatar String?
@@ -144,10 +144,13 @@ model Channel {
   description         String? @db.Text
 
   videos    Video[]
+  shorts    Short[]
+  playlists Playlist[]
 
   crawledAt DateTime @default(now()) @map("crawled_at")
   updatedAt DateTime @updatedAt      @map("updated_at")
 
+  @@index([handle])
   @@map("channels")
 }
 
@@ -156,7 +159,7 @@ model Video {
 
   title       String
   channelId   String?  @map("channel_id")
-  channel     Channel? @relation(fields: [channelId], references: [id])
+  channel     Channel? @relation(fields: [channelId], references: [id], onDelete: SetNull)
   channelName String?  @map("channel_name")
 
   viewsText         String?  @map("views_text")
@@ -178,6 +181,7 @@ model Video {
   comments          Comment[]
   trendingSnapshots TrendingSnapshot[]
   searchResults     SearchResult[]
+  playlistItems     PlaylistItem[]
 
   crawledAt  DateTime  @default(now()) @map("crawled_at")
   updatedAt  DateTime  @updatedAt      @map("updated_at")
@@ -192,6 +196,8 @@ model Short {
   id              String   @id
 
   title           String
+  channelId       String?  @map("channel_id")
+  channel         Channel? @relation(fields: [channelId], references: [id], onDelete: SetNull)
   channelName     String?  @map("channel_name")
 
   viewCount       BigInt?  @map("view_count")
@@ -204,13 +210,14 @@ model Short {
   updatedAt       DateTime @updatedAt      @map("updated_at")
 
   @@index([crawledAt])
+  @@index([channelId])
   @@map("shorts")
 }
 
 model TrendingSnapshot {
   id        BigInt   @id @default(autoincrement())
   videoId   String   @map("video_id")
-  video     Video    @relation(fields: [videoId], references: [id])
+  video     Video    @relation(fields: [videoId], references: [id], onDelete: Cascade)
 
   rank      Int
   category  String?
@@ -225,7 +232,7 @@ model TrendingSnapshot {
 model SearchResult {
   id        BigInt   @id @default(autoincrement())
   videoId   String   @map("video_id")
-  video     Video    @relation(fields: [videoId], references: [id])
+  video     Video    @relation(fields: [videoId], references: [id], onDelete: Cascade)
 
   query     String
   rank      Int
@@ -241,10 +248,10 @@ model SearchResult {
 model Comment {
   id      String  @id
   videoId String  @map("video_id")
-  video   Video   @relation(fields: [videoId], references: [id])
+  video   Video   @relation(fields: [videoId], references: [id], onDelete: Cascade)
 
-  parentId String?  @map("parent_id")
-  parent   Comment?  @relation("CommentReplies", fields: [parentId], references: [id])
+  parentId String?   @map("parent_id")
+  parent   Comment?  @relation("CommentReplies", fields: [parentId], references: [id], onDelete: SetNull)
   replies  Comment[] @relation("CommentReplies")
 
   author       String
@@ -262,18 +269,36 @@ model Comment {
   @@map("comments")
 }
 
-modal Playlist {
-  id      String  @id
-  videoId     String  @map("video_id")
-  channelId     String  @map("channel_id")
-  video       Video   @relation(fields: [videoId], references: [id])
-  channel     Channel @relation(fields: [channelId], references: [id])
-  title       String
-  thumbnails         Json?
-  crawledAt       DateTime @default(now()) @map("crawled_at")
-  updatedAt       DateTime @updatedAt      @map("updated_at")
+model Playlist {
+  id          String   @id
+  channelId   String?  @map("channel_id")
+  channel     Channel? @relation(fields: [channelId], references: [id], onDelete: SetNull)
 
-  @@index([videoId])
+  title       String
+  description String?  @db.Text
+  videoCount  Int?     @map("video_count")
+  thumbnails  Json?
+
+  items       PlaylistItem[]
+
+  crawledAt   DateTime @default(now()) @map("crawled_at")
+  updatedAt   DateTime @updatedAt      @map("updated_at")
+
   @@index([channelId])
-  @@index([videoId, crawledAt])
+  @@map("playlists")
+}
+
+model PlaylistItem {
+  id         BigInt   @id @default(autoincrement())
+  playlistId String   @map("playlist_id")
+  playlist   Playlist @relation(fields: [playlistId], references: [id], onDelete: Cascade)
+  videoId    String   @map("video_id")
+  video      Video    @relation(fields: [videoId], references: [id], onDelete: Cascade)
+  position   Int
+
+  crawledAt  DateTime @default(now()) @map("crawled_at")
+
+  @@unique([playlistId, videoId])
+  @@index([videoId])
+  @@map("playlist_items")
 }

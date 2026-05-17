@@ -6,6 +6,7 @@ import { VideoRepository } from "./repositories/video.repository";
 import { CommentRepository } from "./repositories/comment.repository";
 import { QueueService } from "@/modules/queue/queue.service";
 import { AppLogger } from "@/base/logger/app-logger.service";
+import { ElasticService } from "@/modules/elastic/elastic.service";
 import {
   IngestSearchDto,
   IngestDetailDto,
@@ -13,6 +14,8 @@ import {
   IngestChannelDto,
   IngestTrendingDto,
   IngestShortsDto,
+  IngestChannelVideosDto,
+  IngestPlaylistsDto,
 } from "./dto";
 
 @Injectable()
@@ -24,18 +27,19 @@ export class IngestService {
     private readonly commentRepo: CommentRepository,
     private readonly queue: QueueService,
     private readonly logger: AppLogger,
+    private readonly elastic: ElasticService,
   ) {}
 
   // ── Channel ──────────────────────────────────────────────────────────────
 
   async ingestChannel(dto: IngestChannelDto) {
     const channel = await this.channelRepo.upsert({
-      id: dto.channel_id,
-      name: dto.channel_name,
+      id: dto.channelId,
+      name: dto.channelName,
       handle: dto.handle,
       avatar: dto.avatar,
       banner: dto.banner,
-      subscriberCountText: dto.subscriber_count,
+      subscriberCountText: dto.subscriberCount,
       description: dto.description,
     });
 
@@ -50,26 +54,37 @@ export class IngestService {
     let saved = 0;
 
     for (const [index, video] of dto.videos.entries()) {
-      const videoId = video.video_id;
+      const videoId = video.videoId;
       if (!videoId) continue;
 
-      if (video.channel_id && video.channel) {
+      if (video.channelId && video.channel) {
         await this.channelRepo.upsert({
-          id: video.channel_id,
+          id: video.channelId,
           name: video.channel,
         });
       }
 
-      await this.videoRepo.upsertFromCrawl({
+      const upserted = await this.videoRepo.upsertFromCrawl({
         id: videoId,
         title: video.title ?? videoId,
-        channelId: video.channel_id || null,
+        channelId: video.channelId || null,
         channelName: video.channel,
-        viewCount: video.view_count ? BigInt(video.view_count) : null,
+        viewCount: video.viewCount ? BigInt(video.viewCount) : null,
         durationText: video.duration,
-        publishedTimeText: video.published_time,
-        descriptionSnippet: video.description_snippet,
+        publishedTimeText: video.publishedTime,
+        descriptionSnippet: video.descriptionSnippet,
         thumbnails: video.thumbnails as unknown as Prisma.InputJsonValue,
+      });
+
+      void this.elastic.indexVideo({
+        id: upserted.id,
+        title: upserted.title,
+        channelId: upserted.channelId,
+        channelName: upserted.channelName,
+        description: upserted.descriptionSnippet,
+        viewCount: upserted.viewCount ? Number(upserted.viewCount) : null,
+        isAvailable: upserted.isAvailable,
+        crawledAt: upserted.crawledAt,
       });
 
       await this.prisma.searchResult.create({
@@ -98,7 +113,7 @@ export class IngestService {
   // detail has two shapes: { error, reason } or { title, views, duration... }
 
   async ingestDetail(dto: IngestDetailDto) {
-    const videoId = dto.video_id;
+    const videoId = dto.videoId;
 
     if (dto.error) {
       await this.videoRepo.upsertFromDetail({
@@ -110,14 +125,25 @@ export class IngestService {
       return { videoId, available: false };
     }
 
-    await this.videoRepo.upsertFromDetail({
+    const detail = await this.videoRepo.upsertFromDetail({
       id: videoId,
       title: dto.title ?? videoId,
       channelName: dto.author,
       viewCount: dto.views ? BigInt(dto.views) : null,
-      durationSeconds: dto.length_seconds ? Number(dto.length_seconds) : null,
-      isLiveContent: dto.is_live_content ?? false,
+      durationSeconds: dto.lengthSeconds ? Number(dto.lengthSeconds) : null,
+      isLiveContent: dto.isLiveContent ?? false,
       isAvailable: true,
+    });
+
+    void this.elastic.indexVideo({
+      id: detail.id,
+      title: detail.title,
+      channelId: detail.channelId,
+      channelName: detail.channelName,
+      description: detail.descriptionSnippet,
+      viewCount: detail.viewCount ? Number(detail.viewCount) : null,
+      isAvailable: detail.isAvailable,
+      crawledAt: detail.crawledAt,
     });
 
     this.logger.info("Video detail ingested", { videoId });
@@ -131,25 +157,38 @@ export class IngestService {
     let saved = 0;
 
     for (const [index, video] of dto.videos.entries()) {
-      const videoId = video.video_id;
+      const videoId = video.videoId;
       if (!videoId) continue;
 
-      if (video.channel_id && video.channel) {
+      if (video.channelId && video.channel) {
         await this.channelRepo.upsert({
-          id: video.channel_id,
+          id: video.channelId,
           name: video.channel,
         });
       }
 
-      await this.videoRepo.upsertFromCrawl({
+      const upsertedTrending = await this.videoRepo.upsertFromCrawl({
         id: videoId,
         title: video.title ?? videoId,
-        channelId: video.channel_id || null,
+        channelId: video.channelId || null,
         channelName: video.channel,
-        viewCount: video.view_count ? BigInt(video.view_count) : null,
+        viewCount: video.viewCount ? BigInt(video.viewCount) : null,
         durationText: video.duration,
-        publishedTimeText: video.published_time,
+        publishedTimeText: video.publishedTime,
         thumbnails: video.thumbnails as unknown as Prisma.InputJsonValue,
+      });
+
+      void this.elastic.indexVideo({
+        id: upsertedTrending.id,
+        title: upsertedTrending.title,
+        channelId: upsertedTrending.channelId,
+        channelName: upsertedTrending.channelName,
+        description: upsertedTrending.descriptionSnippet,
+        viewCount: upsertedTrending.viewCount
+          ? Number(upsertedTrending.viewCount)
+          : null,
+        isAvailable: upsertedTrending.isAvailable,
+        crawledAt: upsertedTrending.crawledAt,
       });
 
       await this.prisma.trendingSnapshot.create({
@@ -179,10 +218,10 @@ export class IngestService {
     let saved = 0;
 
     for (const video of dto.videos) {
-      const videoId = video.video_id;
+      const videoId = video.videoId;
       if (!videoId) continue;
 
-      const viewCount = video.view_count ? BigInt(video.view_count) : null;
+      const viewCount = video.viewCount ? BigInt(video.viewCount) : null;
       const durationSeconds = video.duration ? Number(video.duration) : null;
       const thumbnails =
         (video.thumbnails as Prisma.InputJsonValue) ?? Prisma.JsonNull;
@@ -192,14 +231,16 @@ export class IngestService {
         create: {
           id: videoId,
           title: video.title || videoId,
-          channelName: video.channel_name ?? null,
+          channelId: video.channelId ?? null,
+          channelName: video.channelName ?? null,
           viewCount,
           durationSeconds,
           thumbnails,
         },
         update: {
           title: video.title || videoId,
-          channelName: video.channel_name ?? null,
+          channelId: video.channelId ?? null,
+          channelName: video.channelName ?? null,
           viewCount,
           durationSeconds,
           thumbnails,
@@ -214,47 +255,131 @@ export class IngestService {
     return { saved };
   }
 
+  // ── Channel Videos ───────────────────────────────────────────────────────
+  // Saves channel videos to `videos` table and queues detail crawl per video.
+
+  async ingestChannelVideos(dto: IngestChannelVideosDto) {
+    let saved = 0;
+
+    for (const video of dto.videos) {
+      const videoId = video.videoId;
+      if (!videoId) continue;
+
+      const upserted = await this.videoRepo.upsertFromCrawl({
+        id: videoId,
+        title: video.title ?? videoId,
+        channelId: dto.channelId,
+        channelName: dto.channelName ?? null,
+        viewCount: video.viewCount ? BigInt(video.viewCount) : null,
+        durationText: video.duration ?? null,
+        publishedTimeText: video.publishedTime ?? null,
+        thumbnails:
+          (video.thumbnails as unknown as Prisma.InputJsonValue) ??
+          Prisma.JsonNull,
+      });
+
+      void this.elastic.indexVideo({
+        id: upserted.id,
+        title: upserted.title,
+        channelId: upserted.channelId,
+        channelName: upserted.channelName,
+        description: upserted.descriptionSnippet,
+        viewCount: upserted.viewCount ? Number(upserted.viewCount) : null,
+        isAvailable: upserted.isAvailable,
+        crawledAt: upserted.crawledAt,
+      });
+
+      await this.queue.addCrawlDetail(videoId);
+      saved++;
+    }
+
+    this.logger.info("Channel videos ingested", {
+      channelId: dto.channelId,
+      count: saved,
+    });
+    return { saved };
+  }
+
+  // ── Playlists ─────────────────────────────────────────────────────────────
+  // Saves playlist metadata to `playlists` table (no items — list-level only).
+
+  async ingestPlaylists(dto: IngestPlaylistsDto) {
+    let saved = 0;
+
+    for (const p of dto.playlists) {
+      const playlistId = p.playlistId;
+      if (!playlistId) continue;
+
+      const thumbnails = p.thumbnail ? [{ url: p.thumbnail }] : [];
+
+      await this.prisma.playlist.upsert({
+        where: { id: playlistId },
+        create: {
+          id: playlistId,
+          channelId: dto.channelId,
+          title: p.title || playlistId,
+          videoCount: p.videoCount ?? null,
+          thumbnails,
+        },
+        update: {
+          title: p.title || playlistId,
+          videoCount: p.videoCount ?? null,
+          thumbnails,
+          updatedAt: new Date(),
+        },
+      });
+
+      saved++;
+    }
+
+    this.logger.info("Playlists ingested", {
+      channelId: dto.channelId,
+      count: saved,
+    });
+    return { saved };
+  }
+
   // ── Comments ──────────────────────────────────────────────────────────────
 
   async ingestComments(dto: IngestCommentsDto) {
     let saved = 0;
 
     for (const comment of dto.comments) {
-      const commentId = comment.comment_id;
+      const commentId = comment.commentId;
       if (!commentId) continue;
 
       await this.commentRepo.upsert({
         id: commentId,
-        videoId: dto.video_id,
+        videoId: dto.videoId,
         author: comment.author,
         avatar: comment.avatar,
         content: comment.content,
         likesCount: comment.likes,
-        repliesCount: comment.replies_count,
-        publishedTimeText: comment.published_time,
+        repliesCount: comment.repliesCount,
+        publishedTimeText: comment.publishedTime,
       });
       saved++;
 
       for (const reply of comment.replies ?? []) {
-        const replyId = reply.comment_id;
+        const replyId = reply.commentId;
         if (!replyId) continue;
 
         await this.commentRepo.upsert({
           id: replyId,
-          videoId: dto.video_id,
+          videoId: dto.videoId,
           parentId: commentId,
           author: reply.author,
           avatar: reply.avatar,
           content: reply.content,
           likesCount: reply.likes,
-          publishedTimeText: reply.published_time,
+          publishedTimeText: reply.publishedTime,
         });
         saved++;
       }
     }
 
     this.logger.info("Comments ingested", {
-      videoId: dto.video_id,
+      videoId: dto.videoId,
       count: saved,
     });
     return { saved };

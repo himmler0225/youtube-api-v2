@@ -9,9 +9,8 @@ import {
 export class IngestDetailDto {
   @IsString()
   @IsNotEmpty()
-  video_id: string;
+  videoId!: string;
 
-  // Nếu error=true → video không khả dụng
   @IsBoolean()
   @IsOptional()
   error?: boolean;
@@ -34,9 +33,9 @@ export class IngestDetailDto {
 
   @IsNumber()
   @IsOptional()
-  length_seconds?: number;
+  lengthSeconds?: number;
 
   @IsBoolean()
   @IsOptional()
-  is_live_content?: boolean;
+  isLiveContent?: boolean;
 }

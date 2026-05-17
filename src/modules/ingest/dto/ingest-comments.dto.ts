@@ -11,17 +11,17 @@ import { Type } from "class-transformer";
 
 export class CommentReplyItem {
   @IsString()
-  comment_id: string;
+  commentId!: string;
 
   @IsString()
-  author: string;
+  author!: string;
 
   @IsString()
   @IsOptional()
   avatar?: string;
 
   @IsString()
-  content: string;
+  content!: string;
 
   @IsNumber()
   @IsOptional()
@@ -29,22 +29,22 @@ export class CommentReplyItem {
 
   @IsString()
   @IsOptional()
-  published_time?: string;
+  publishedTime?: string;
 }
 
 export class CommentItem {
   @IsString()
-  comment_id: string;
+  commentId!: string;
 
   @IsString()
-  author: string;
+  author!: string;
 
   @IsString()
   @IsOptional()
   avatar?: string;
 
   @IsString()
-  content: string;
+  content!: string;
 
   @IsNumber()
   @IsOptional()
@@ -52,11 +52,11 @@ export class CommentItem {
 
   @IsNumber()
   @IsOptional()
-  replies_count?: number;
+  repliesCount?: number;
 
   @IsString()
   @IsOptional()
-  published_time?: string;
+  publishedTime?: string;
 
   @IsArray()
   @IsOptional()
@@ -68,11 +68,11 @@ export class CommentItem {
 export class IngestCommentsDto {
   @IsString()
   @IsNotEmpty()
-  video_id: string;
+  videoId!: string;
 
   @ArrayMinSize(1)
   @IsArray()
   @ValidateNested({ each: true })
   @Type(() => CommentItem)
-  comments: CommentItem[];
+  comments!: CommentItem[];
 }
