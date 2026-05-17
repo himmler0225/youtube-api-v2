@@ -1,6 +1,6 @@
 # youtube-api
 
-NestJS REST API — receives data from `youtube-crawler`, stores it in PostgreSQL, and serves it to clients over HTTP.
+NestJS 11 REST API — receives crawled data from `youtube-crawler`, stores it in PostgreSQL, and serves it to clients over HTTP.
 
 ---
 
@@ -11,37 +11,41 @@ Client
   ├── GET /videos, /videos/:id, ...       → VideoModule
   └── POST /auth/*                        → AuthModule
 
-youtube-crawler
+youtube-crawler (scheduled batch)
   └── POST /internal/ingest/*             → IngestModule
-        └── push video_ids → BullMQ queue
-                └── CrawlDetailProcessor
-                      └── GET crawler /api/video/:id   (real-time)
+        └── push video_id → BullMQ queue "crawl-detail"
+              └── CrawlDetailProcessor (concurrency=3)
+                    ├── GET /api/video/:id        → crawler (real-time)
+                    └── GET /api/video/:id/comments
 ```
 
-**DB-first pattern:** DB hit → miss/live → call crawler → save to DB → return
+**DB-first pattern (VideoModule):** check DB → miss or live → call crawler → save → return.
 
 ---
 
 ## Modules
 
-| Module | Description |
-|--------|-------------|
-| `PrismaModule` | Global — PostgreSQL via Prisma ORM |
-| `RedisModule` | Global — ioredis wrapper, get/set JSON with TTL |
-| `CrawlerClientModule` | Global — HTTP client for real-time calls to youtube-crawler |
-| `QueueModule` | Global — BullMQ on Redis, exports `QueueService` |
-| `AuthModule` | Register / login / refresh / logout, session management |
-| `IngestModule` | Receives batch data from crawler, saves to DB, pushes to queue |
-| `VideoModule` | Public endpoints: list, search, trending, live, shorts, detail, comments |
-| `CrawlWorkerModule` | BullMQ processor — auto-crawls detail + comments after ingest |
+| Module | Scope | Description |
+|--------|-------|-------------|
+| `PrismaModule` | Global | PostgreSQL via Prisma ORM |
+| `RedisModule` | Global | ioredis wrapper, JSON get/set with TTL |
+| `CrawlerClientModule` | Global | HTTP client for real-time calls to youtube-crawler |
+| `QueueModule` | Global | BullMQ on Redis, exports `QueueService` |
+| `AuthModule` | — | Register, login, refresh, logout, session management |
+| `IngestModule` | — | Receives batch data from crawler, saves to DB, pushes to queue |
+| `VideoModule` | — | Public endpoints: list, search, trending, live, shorts, detail, comments |
+| `CrawlWorkerModule` | — | BullMQ processor — auto-crawls detail + comments after ingest |
+| `ElasticModule` | — | Elasticsearch client, used by VideoModule for full-text search |
+
+See `README.md` inside each module directory for flow details.
 
 ### Base infrastructure (`src/base/`)
 
 | Component | Description |
 |-----------|-------------|
 | `AppLogger` | Structured JSON logger, redacts sensitive fields, configurable level |
-| `RequestContextMiddleware` | Injects a `requestId` UUID into every request |
-| `AllExceptionsFilter` | Normalizes all exceptions → `ApiError { code, message }` |
+| `RequestContextMiddleware` | Injects `requestId` UUID into every request |
+| `AllExceptionsFilter` | Normalises all exceptions → `ApiError { code, message }` |
 | `ResponseInterceptor` | Wraps all responses → `ApiSuccess { data, meta }` |
 | `BasePrismaRepository` | Abstract generic repository (CRUD, pagination, filter, sort) |
 
@@ -63,49 +67,50 @@ youtube-crawler
 
 | Method | Path | Query | Description |
 |--------|------|-------|-------------|
-| GET | `/videos` | `q`, `page`, `limit` | List videos — Elasticsearch when `q` is present |
-| GET | `/videos/trending` | `category`, `page`, `limit` | Latest trending snapshot |
-| GET | `/videos/live` | `q`, `page`, `limit` | Real-time live search from crawler (30s cache) |
-| GET | `/videos/shorts` | `page`, `limit` | Shorts feed — DB first, miss → crawler |
-| GET | `/videos/:id` | — | DB first, miss/live → crawler (live cache 60s) |
-| GET | `/videos/:id/comments` | `page`, `limit` | DB first, miss → crawl → save → paginate |
+| GET | `/videos` | `q`, `page`, `limit` | List videos — Elasticsearch when `q` present, Prisma otherwise |
+| GET | `/videos/trending` | `category`, `page`, `limit` | Latest trending snapshot from DB |
+| GET | `/videos/live` | `q`, `page`, `limit` | Real-time live search via crawler (30s cache) |
+| GET | `/videos/shorts` | `page`, `limit` | Shorts feed from `shorts` table; miss → crawler |
+| GET | `/videos/:id` | — | DB first; live content always re-fetched (60s cache) |
+| GET | `/videos/:id/comments` | `page`, `limit` | DB first; 0 comments → crawl → save → paginate |
 
 ### Ingest — `/internal/ingest` *(header: `X-Service-Key`)*
 
 | Method | Path | Description |
 |--------|------|-------------|
-| POST | `/internal/ingest/channel` | Save channel info |
-| POST | `/internal/ingest/trending` | Save trending batch + push to queue |
-| POST | `/internal/ingest/search` | Save search results + push to queue |
-| POST | `/internal/ingest/detail` | Save single video detail |
-| POST | `/internal/ingest/comments` | Save comments |
+| POST | `/internal/ingest/channel` | Upsert channel |
+| POST | `/internal/ingest/trending` | Upsert videos + TrendingSnapshot + queue detail |
+| POST | `/internal/ingest/search` | Upsert videos + SearchResult + queue detail |
+| POST | `/internal/ingest/detail` | Update video with accurate metrics from detail page |
+| POST | `/internal/ingest/shorts` | Upsert into `shorts` table (no queue) |
+| POST | `/internal/ingest/comments` | Upsert comments + replies |
 
 ---
 
-## BullMQ — Auto-crawl pipeline
+## BullMQ pipeline
 
 After `ingestTrending` / `ingestSearch`, each `video_id` is pushed to the `crawl-detail` queue.
 
-`CrawlDetailProcessor` (concurrency=3):
+`CrawlDetailProcessor` (concurrency=3, attempts=3, exponential backoff 5s):
 1. `getVideoDetail()` → `ingestDetail()`
-2. If not live → `getComments()` → `ingestComments()`
-3. Comment failure → log warn, job does not fail. Retry 3 times, exponential backoff 5s.
+2. Skip comments if live content
+3. `getComments()` → `ingestComments()` (failure isolated — does not fail the job)
 
-Jobs use `jobId = videoId` — automatic deduplication when a video is already in the queue.
+`jobId = videoId` — BullMQ deduplicates: same video won't be queued twice while pending/active.
 
 ---
 
 ## Search
 
-`GET /videos?q=keyword` uses Elasticsearch (`multi_match` on `title^3`, `channelName`, `description`, fuzziness `AUTO`).
+`GET /videos?q=keyword` → Elasticsearch `multi_match` on `title^3`, `channelName`, `description`, fuzziness `AUTO`.
 
-Without `q` → Prisma `findMany` ordered by `crawledAt desc`.
+No `q` → Prisma `findMany` ordered by `crawledAt desc`.
 
 ---
 
 ## Database schema
 
-Tables use snake_case via `@@map`. TypeScript code stays camelCase via `@map`.
+Tables use snake_case via `@@map`. TypeScript stays camelCase via `@map`.
 
 ```
 users ──┬── auth_sessions
@@ -115,6 +120,8 @@ users ──┬── auth_sessions
 channels ──── videos ──┬── trending_snapshots
                        ├── search_results
                        └── comments (self-referencing replies)
+
+shorts  (separate from videos — no channel FK, duration stored as integer seconds)
 ```
 
 ---
@@ -126,8 +133,8 @@ PORT=3000
 NODE_ENV=development
 
 # PostgreSQL
-DATABASE_URL=postgresql://user:pass@host:6543/db?pgbouncer=true   # pgbouncer (runtime)
-DIRECT_URL=postgresql://user:pass@host:5432/db                     # direct connection (migrations)
+DATABASE_URL=postgresql://user:pass@host:6543/db?pgbouncer=true
+DIRECT_URL=postgresql://user:pass@host:5432/db
 
 # Redis
 REDIS_HOST=localhost
@@ -141,7 +148,7 @@ JWT_REFRESH_SECRET=
 JWT_REFRESH_EXPIRES_IN=7d
 
 # Security
-PEPPER=                      # HMAC pepper for password hashing
+PEPPER=
 
 # Internal service auth
 INTERNAL_SERVICE_KEY=        # guards /internal/ingest/*

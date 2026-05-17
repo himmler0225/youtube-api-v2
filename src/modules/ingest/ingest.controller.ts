@@ -8,6 +8,7 @@ import {
   IngestDetailDto,
   IngestCommentsDto,
   IngestTrendingDto,
+  IngestShortsDto,
 } from "./dto";
 
 @SkipThrottle()
@@ -34,6 +35,11 @@ export class IngestController {
   @Post("detail")
   ingestDetail(@Body() dto: IngestDetailDto) {
     return this.ingestService.ingestDetail(dto);
+  }
+
+  @Post("shorts")
+  ingestShorts(@Body() dto: IngestShortsDto) {
+    return this.ingestService.ingestShorts(dto);
   }
 
   @Post("comments")

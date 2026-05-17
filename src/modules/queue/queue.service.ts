@@ -9,11 +9,7 @@ export { CRAWL_DETAIL_QUEUE } from "./constants";
 export class QueueService {
   constructor(@InjectQueue(CRAWL_DETAIL_QUEUE) private readonly queue: Queue) {}
 
-  /**
-   * Enqueue a video to have its detail + comments crawled.
-   * jobId = videoId → prevents duplicate jobs for the same video
-   * while it's still pending/active.
-   */
+  // jobId = videoId prevents duplicate jobs for the same video while pending/active.
   async addCrawlDetail(videoId: string): Promise<void> {
     await this.queue.add(
       "crawl-detail",

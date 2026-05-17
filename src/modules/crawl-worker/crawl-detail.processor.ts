@@ -1,12 +1,3 @@
-/**
- * CrawlDetailProcessor — BullMQ worker tự động crawl detail + comments
- * cho mỗi video_id được đẩy vào queue sau khi ingest trending/search.
- *
- * Flow:
- *   1. Nhận job { videoId }
- *   2. Gọi crawler lấy video detail → ingestDetail() lưu DB
- *   3. Nếu không phải live → gọi crawler lấy comments → ingestComments() lưu DB
- */
 import { Processor, WorkerHost } from "@nestjs/bullmq";
 import { Job } from "bullmq";
 import {
@@ -57,8 +48,7 @@ export class CrawlDetailProcessor extends WorkerHost {
       is_live_content: d.is_live_content,
     });
 
-    // 2. Skip comments for live content
-    if (d.is_live_content) return;
+    if (d.is_live_content) return; // live comment streams have no archival value
 
     try {
       const comments = await this.crawler.getComments(videoId, 1, 100);
@@ -84,10 +74,10 @@ export class CrawlDetailProcessor extends WorkerHost {
       });
       this.logger.info("[CrawlWorker] Comments ingested", { videoId });
     } catch (error) {
-      // Comment fetch failing should not fail the job — detail is already saved
+      // Comment failure must not fail the job — detail is already saved.
       this.logger.warn("[CrawlWorker] Comment fetch failed, continuing", {
         videoId,
-        error,
+        error: String(error),
       });
     }
   }

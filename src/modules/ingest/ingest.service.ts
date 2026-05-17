@@ -12,6 +12,7 @@ import {
   IngestCommentsDto,
   IngestChannelDto,
   IngestTrendingDto,
+  IngestShortsDto,
 } from "./dto";
 
 @Injectable()
@@ -52,7 +53,6 @@ export class IngestService {
       const videoId = video.video_id;
       if (!videoId) continue;
 
-      // Upsert channel nếu có channel_id
       if (video.channel_id && video.channel) {
         await this.channelRepo.upsert({
           id: video.channel_id,
@@ -82,7 +82,6 @@ export class IngestService {
         },
       });
 
-      // Auto-crawl detail + comments in background
       await this.queue.addCrawlDetail(videoId);
       saved++;
     }
@@ -95,6 +94,8 @@ export class IngestService {
   }
 
   // ── Video Detail ──────────────────────────────────────────────────────────
+  // Called by CrawlDetailProcessor, not directly by crawler batch jobs.
+  // detail has two shapes: { error, reason } or { title, views, duration... }
 
   async ingestDetail(dto: IngestDetailDto) {
     const videoId = dto.video_id;
@@ -168,6 +169,48 @@ export class IngestService {
       category: dto.category,
       count: saved,
     });
+    return { saved };
+  }
+
+  // ── Shorts ───────────────────────────────────────────────────────────────
+  // Writes to `shorts` table, not `videos` — no queue push needed.
+
+  async ingestShorts(dto: IngestShortsDto) {
+    let saved = 0;
+
+    for (const video of dto.videos) {
+      const videoId = video.video_id;
+      if (!videoId) continue;
+
+      const viewCount = video.view_count ? BigInt(video.view_count) : null;
+      const durationSeconds = video.duration ? Number(video.duration) : null;
+      const thumbnails =
+        (video.thumbnails as Prisma.InputJsonValue) ?? Prisma.JsonNull;
+
+      await this.prisma.short.upsert({
+        where: { id: videoId },
+        create: {
+          id: videoId,
+          title: video.title || videoId,
+          channelName: video.channel_name ?? null,
+          viewCount,
+          durationSeconds,
+          thumbnails,
+        },
+        update: {
+          title: video.title || videoId,
+          channelName: video.channel_name ?? null,
+          viewCount,
+          durationSeconds,
+          thumbnails,
+          updatedAt: new Date(),
+        },
+      });
+
+      saved++;
+    }
+
+    this.logger.info("Shorts ingested", { count: saved });
     return { saved };
   }
 

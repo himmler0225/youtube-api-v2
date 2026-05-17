@@ -166,7 +166,6 @@ model Video {
   viewCount         BigInt?  @map("view_count")
   durationSeconds   Int?     @map("duration_seconds")
   isLiveContent     Boolean  @default(false) @map("is_live_content")
-  isShort           Boolean  @default(false) @map("is_short")
 
   descriptionSnippet String?  @db.Text @map("description_snippet")
   thumbnails         Json?
@@ -187,6 +186,25 @@ model Video {
   @@index([crawledAt])
   @@index([isAvailable])
   @@map("videos")
+}
+
+model Short {
+  id              String   @id
+
+  title           String
+  channelName     String?  @map("channel_name")
+
+  viewCount       BigInt?  @map("view_count")
+  durationSeconds Int?     @map("duration_seconds")
+  thumbnails      Json?
+
+  isAvailable     Boolean  @default(true) @map("is_available")
+
+  crawledAt       DateTime @default(now()) @map("crawled_at")
+  updatedAt       DateTime @updatedAt      @map("updated_at")
+
+  @@index([crawledAt])
+  @@map("shorts")
 }
 
 model TrendingSnapshot {

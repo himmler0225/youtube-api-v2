@@ -123,16 +123,18 @@ export class VideoService {
   async getShorts(page = 1, limit = 30) {
     const offset = (page - 1) * limit;
 
-    const dbCount = await this.prisma.video.count({ where: { isShort: true } });
+    const dbCount = await this.prisma.short.count({
+      where: { isAvailable: true },
+    });
 
     if (dbCount >= 10) {
-      const videos = await this.prisma.video.findMany({
-        where: { isShort: true, isAvailable: true },
+      const shorts = await this.prisma.short.findMany({
+        where: { isAvailable: true },
         skip: offset,
         take: limit,
         orderBy: { crawledAt: "desc" },
       });
-      return { total: dbCount, page, limit, videos };
+      return { total: dbCount, page, limit, shorts };
     }
 
     this.logger.info("Fetching shorts from crawler");
@@ -140,34 +142,32 @@ export class VideoService {
 
     for (const s of crawled) {
       if (!s.video_id) continue;
-      await this.prisma.video.upsert({
-        where: { id: s.video_id },
+      const videoId = s.video_id;
+      await this.prisma.short.upsert({
+        where: { id: videoId },
         create: {
-          id: s.video_id,
-          title: s.title || s.video_id,
+          id: videoId,
+          title: s.title || videoId,
           channelName: s.channel_name || null,
           viewCount: s.view_count ? BigInt(s.view_count) : null,
           thumbnails: s.thumbnails ?? [],
-          isShort: true,
-          isAvailable: true,
         },
         update: {
-          title: s.title || s.video_id,
+          title: s.title || videoId,
           channelName: s.channel_name || null,
           viewCount: s.view_count ? BigInt(s.view_count) : null,
           thumbnails: s.thumbnails ?? [],
-          isShort: true,
         },
       });
     }
 
-    const videos = await this.prisma.video.findMany({
-      where: { isShort: true, isAvailable: true },
+    const shorts = await this.prisma.short.findMany({
+      where: { isAvailable: true },
       skip: offset,
       take: limit,
       orderBy: { crawledAt: "desc" },
     });
-    return { total: crawled.length, page, limit, videos };
+    return { total: crawled.length, page, limit, shorts };
   }
 
   async searchLive(query: string, page = 1, limit = 30) {
