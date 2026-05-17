@@ -180,6 +180,58 @@ export class VideoService {
     return { videos, fromCache: false };
   }
 
+  async getRelatedVideos(videoId: string, limit = 10) {
+    const video = await this.prisma.video.findUnique({
+      where: { id: videoId },
+      select: { channelId: true },
+    });
+    const channelId = video?.channelId ?? null;
+
+    const sameChannel = channelId
+      ? await this.prisma.video.findMany({
+          where: { isAvailable: true, id: { not: videoId }, channelId },
+          take: limit,
+          orderBy: { crawledAt: "desc" },
+        })
+      : [];
+
+    if (sameChannel.length >= limit) return sameChannel;
+
+    const excludeIds = [videoId, ...sameChannel.map((v) => v.id)];
+    const fill = await this.prisma.video.findMany({
+      where: { isAvailable: true, id: { notIn: excludeIds } },
+      take: limit - sameChannel.length,
+      orderBy: { crawledAt: "desc" },
+    });
+
+    return [...sameChannel, ...fill];
+  }
+
+  async getChannel(channelId: string) {
+    const channel = await this.prisma.channel.findUnique({
+      where: { id: channelId },
+    });
+    if (!channel) throw AppException.notFound(`Channel ${channelId} not found`);
+    const videoCount = await this.prisma.video.count({
+      where: { channelId, isAvailable: true },
+    });
+    return { ...channel, videoCount };
+  }
+
+  async getChannelVideos(channelId: string, page = 1, limit = 20) {
+    const offset = (page - 1) * limit;
+    const [videos, total] = await Promise.all([
+      this.prisma.video.findMany({
+        where: { channelId, isAvailable: true },
+        skip: offset,
+        take: limit,
+        orderBy: { crawledAt: "desc" },
+      }),
+      this.prisma.video.count({ where: { channelId, isAvailable: true } }),
+    ]);
+    return { total, page, limit, videos };
+  }
+
   private async _saveVideoDetail(videoId: string, result: CrawlerVideoResult) {
     if ("error" in result && result.error) {
       await this.prisma.video.upsert({

@@ -261,3 +261,19 @@ model Comment {
   @@index([videoId, crawledAt])
   @@map("comments")
 }
+
+modal Playlist {
+  id      String  @id
+  videoId     String  @map("video_id")
+  channelId     String  @map("channel_id")
+  video       Video   @relation(fields: [videoId], references: [id])
+  channel     Channel @relation(fields: [channelId], references: [id])
+  title       String
+  thumbnails         Json?
+  crawledAt       DateTime @default(now()) @map("crawled_at")
+  updatedAt       DateTime @updatedAt      @map("updated_at")
+
+  @@index([videoId])
+  @@index([channelId])
+  @@index([videoId, crawledAt])
+}
