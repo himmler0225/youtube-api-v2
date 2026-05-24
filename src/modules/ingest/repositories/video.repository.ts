@@ -58,10 +58,14 @@ export class VideoRepository extends BasePrismaRepository<Video> {
     isAvailable: boolean;
     unavailableReason?: string | null;
     descriptionSnippet?: string | null;
+    thumbnails?: Prisma.InputJsonValue | null;
   }) {
     return this.prisma.video.upsert({
       where: { id: data.id },
-      create: data,
+      create: {
+        ...data,
+        thumbnails: data.thumbnails ?? Prisma.JsonNull,
+      },
       update: {
         title: data.title,
         channelId: data.channelId,
@@ -73,6 +77,7 @@ export class VideoRepository extends BasePrismaRepository<Video> {
         isAvailable: data.isAvailable,
         unavailableReason: data.unavailableReason,
         descriptionSnippet: data.descriptionSnippet,
+        ...(data.thumbnails != null ? { thumbnails: data.thumbnails } : {}),
         detailCrawledAt: new Date(),
         updatedAt: new Date(),
       },

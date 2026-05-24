@@ -12,8 +12,13 @@ async function bootstrap() {
   const logger = app.get(AppLogger);
   app.useLogger(logger);
 
+  const corsOrigins = (process.env.CORS_ORIGINS ?? "")
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean);
+
   app.enableCors({
-    origin: ["http://localhost:8080", "http://127.0.0.1:8080"],
+    origin: corsOrigins.length ? corsOrigins : false,
     credentials: true,
   });
 

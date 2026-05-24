@@ -46,6 +46,7 @@ export class CrawlDetailProcessor extends WorkerHost {
       lengthSeconds: d.length_seconds ? Number(d.length_seconds) : undefined,
       isLiveContent: d.is_live_content,
       description: d.description,
+      thumbnails: d.thumbnails,
     });
 
     if (d.is_live_content) return;

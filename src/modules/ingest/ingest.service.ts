@@ -153,6 +153,7 @@ export class IngestService {
       isLiveContent: dto.isLiveContent ?? false,
       isAvailable: true,
       descriptionSnippet: dtoDescription ?? null,
+      thumbnails: (dto.thumbnails ?? null) as Prisma.InputJsonValue | null,
     });
 
     void this.algolia.indexData(ALGOLIA_VIDEO_INDEX, {

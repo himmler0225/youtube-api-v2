@@ -12,7 +12,8 @@ RUN npm run build
 FROM node:20-alpine
 WORKDIR /app
 COPY package*.json ./
-RUN npm ci --omit=dev
+# prisma CLI cần thiết cho migrate deploy lúc startup nhưng là devDep — cài riêng
+RUN npm ci --omit=dev && npm install prisma --no-save
 COPY --from=builder /app/dist             ./dist
 COPY --from=builder /app/generated        ./generated
 COPY --from=builder /app/prisma           ./prisma

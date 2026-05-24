@@ -7,6 +7,7 @@ export type CrawlerVideoDetail = {
   views: number;
   is_live_content: boolean;
   description?: string;
+  thumbnails?: Array<{ url: string; width?: number; height?: number }>;
 };
 
 export type CrawlerVideoError = {

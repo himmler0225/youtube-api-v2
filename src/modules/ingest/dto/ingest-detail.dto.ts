@@ -1,4 +1,5 @@
 import {
+  IsArray,
   IsBoolean,
   IsNotEmpty,
   IsNumber,
@@ -46,4 +47,8 @@ export class IngestDetailDto {
   @IsString()
   @IsOptional()
   channelId?: string;
+
+  @IsArray()
+  @IsOptional()
+  thumbnails?: Record<string, unknown>[];
 }
