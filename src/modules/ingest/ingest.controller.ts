@@ -1,4 +1,4 @@
-import { Body, Controller, Post, UseGuards } from "@nestjs/common";
+import { Body, Controller, Post, UseGuards, HttpCode } from "@nestjs/common";
 import { SkipThrottle } from "@nestjs/throttler";
 import { IngestService } from "./ingest.service";
 import { IngestGuard } from "./ingest.guard";
@@ -63,5 +63,11 @@ export class IngestController {
   @Post("playlist-items")
   ingestPlaylistItems(@Body() dto: IngestPlaylistItemsDto) {
     return this.ingestService.ingestPlaylistItems(dto);
+  }
+
+  @Post("repair/playlist-videos")
+  @HttpCode(200)
+  repairPlaylistVideos() {
+    return this.ingestService.repairPlaylistVideos();
   }
 }

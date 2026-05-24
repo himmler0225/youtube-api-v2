@@ -388,7 +388,7 @@ export class IngestService {
       const thumbnail = v.thumbnail;
       const position = v.position;
 
-      await this.prisma.video.upsert({
+      const video = await this.prisma.video.upsert({
         where: { id: videoId },
         create: {
           id: videoId,
@@ -398,7 +398,12 @@ export class IngestService {
           thumbnails: thumbnail ? [{ url: thumbnail }] : [],
         },
         update: {},
+        select: { detailCrawledAt: true },
       });
+
+      if (!video.detailCrawledAt) {
+        await this.queue.addCrawlDetail(videoId);
+      }
 
       await this.prisma.playlistItem.upsert({
         where: {
@@ -412,6 +417,57 @@ export class IngestService {
 
     this.logger.info("Playlist items ingested", { playlistId, count: saved });
     return { saved };
+  }
+
+  // ── Repair ───────────────────────────────────────────────────────────────
+  // Finds playlist items whose video is missing or has never been detail-crawled,
+  // then re-queues them. Safe to call multiple times — BullMQ deduplicates by jobId.
+
+  async repairPlaylistVideos() {
+    // Videos referenced in playlist_items but not in videos table
+    const orphaned = await this.prisma.$queryRaw<{ video_id: string }[]>`
+      SELECT DISTINCT pi.video_id
+      FROM playlist_items pi
+      LEFT JOIN videos v ON v.id = pi.video_id
+      WHERE v.id IS NULL
+    `;
+
+    // Videos that exist but never got detail-crawled
+    const incomplete = await this.prisma.video.findMany({
+      where: {
+        playlistItems: { some: {} },
+        detailCrawledAt: null,
+      },
+      select: { id: true },
+    });
+
+    const orphanIds = orphaned.map((r) => r.video_id);
+    const incompleteIds = incomplete.map((v) => v.id);
+    const allIds = [...new Set([...orphanIds, ...incompleteIds])];
+
+    // Create stub records for any truly orphaned IDs so FK is satisfied
+    for (const videoId of orphanIds) {
+      await this.prisma.video.upsert({
+        where: { id: videoId },
+        create: { id: videoId, title: videoId },
+        update: {},
+      });
+    }
+
+    for (const videoId of allIds) {
+      await this.queue.addCrawlDetail(videoId);
+    }
+
+    this.logger.info("Playlist video repair queued", {
+      orphaned: orphanIds.length,
+      incomplete: incompleteIds.length,
+      queued: allIds.length,
+    });
+    return {
+      orphaned: orphanIds.length,
+      incomplete: incompleteIds.length,
+      queued: allIds.length,
+    };
   }
 
   // ── Comments ──────────────────────────────────────────────────────────────

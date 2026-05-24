@@ -64,9 +64,27 @@ export class VideoService {
       return { videoId, total: dbCount, page, limit, comments };
     }
 
+    // Skip crawler call if we already tried recently and got nothing
+    const crawlKey = `comments:crawled:${videoId}`;
+    const alreadyTried = await this.redis.get<boolean>(crawlKey);
+    if (alreadyTried) {
+      return { videoId, total: 0, page, limit, comments: [] };
+    }
+
     this.logger.info("Fetching comments from crawler", { videoId });
-    const crawled = await this.crawler.getComments(videoId, 1, 100);
-    await this._saveComments(videoId, crawled);
+    try {
+      const crawled = await this.crawler.getComments(videoId, 1, 100);
+      await this._saveComments(videoId, crawled);
+      // Cache that we attempted so we don't spam the crawler (TTL = 10 min)
+      await this.redis.set(crawlKey, true, 600);
+    } catch (err) {
+      this.logger.warn("Failed to fetch comments from crawler", {
+        videoId,
+        err: err instanceof Error ? err.message : String(err),
+      });
+      await this.redis.set(crawlKey, true, 600);
+      return { videoId, total: 0, page, limit, comments: [] };
+    }
 
     const comments = await this.prisma.comment.findMany({
       where: { videoId, parentId: null },
@@ -75,7 +93,7 @@ export class VideoService {
       skip,
       take: limit,
     });
-    return { videoId, total: crawled.length, page, limit, comments };
+    return { videoId, total: comments.length, page, limit, comments };
   }
 
   async listVideos(query?: string, page = 1, limit = 20) {
