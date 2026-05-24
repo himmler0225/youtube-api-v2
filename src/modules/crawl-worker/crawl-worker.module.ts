@@ -1,10 +1,3 @@
-/**
- * CrawlWorkerModule — chứa BullMQ processor để auto-crawl video detail.
- *
- * Import IngestModule để dùng IngestService lưu data sau khi crawl.
- * CrawlerClientService được inject tự động (CrawlerClientModule là @Global).
- * Queue connection được lấy từ QueueModule (cũng @Global).
- */
 import { Module } from "@nestjs/common";
 import { BullModule } from "@nestjs/bullmq";
 import { CrawlDetailProcessor } from "./crawl-detail.processor";

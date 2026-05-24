@@ -22,9 +22,6 @@ async function bootstrap() {
     credentials: true,
   });
 
-  // BigInt serialization: Express's json replacer — dùng thay BigInt.prototype.toJSON
-  // vì JSON.stringify throw trước khi gọi toJSON cho BigInt primitives.
-  // viewCount YouTube tối đa ~10B < Number.MAX_SAFE_INTEGER (9×10¹⁵) nên Number an toàn.
   const expressApp = app.getHttpAdapter().getInstance() as {
     set: (key: string, value: unknown) => void;
   };
@@ -62,6 +59,10 @@ async function bootstrap() {
         in: "header",
       },
       "JWT-auth",
+    )
+    .addApiKey(
+      { type: "apiKey", in: "header", name: "x-service-key", description: "Internal service key" },
+      "x-service-key",
     )
     .addTag("auth", "Authentication endpoints")
     .addTag("users", "User management endpoints")

@@ -34,8 +34,6 @@ export class IngestService {
     private readonly algolia: AlgoliaService,
   ) {}
 
-  // ── Channel ──────────────────────────────────────────────────────────────
-
   async ingestChannel(dto: IngestChannelDto) {
     const channel = await this.channelRepo.upsert({
       id: dto.channelId,
@@ -50,8 +48,6 @@ export class IngestService {
     this.logger.info("Channel ingested", { channelId: channel.id });
     return { channelId: channel.id };
   }
-
-  // ── Search ───────────────────────────────────────────────────────────────
 
   async ingestSearch(dto: IngestSearchDto) {
     const crawledAt = new Date();
@@ -112,10 +108,6 @@ export class IngestService {
     return { saved };
   }
 
-  // ── Video Detail ──────────────────────────────────────────────────────────
-  // Called by CrawlDetailProcessor, not directly by crawler batch jobs.
-  // detail has two shapes: { error, reason } or { title, views, duration... }
-
   async ingestDetail(dto: IngestDetailDto) {
     const videoId = dto.videoId;
 
@@ -170,8 +162,6 @@ export class IngestService {
     this.logger.info("Video detail ingested", { videoId });
     return { videoId, available: true };
   }
-
-  // ── Trending ──────────────────────────────────────────────────────────────
 
   async ingestTrending(dto: IngestTrendingDto) {
     const crawledAt = new Date();
@@ -232,9 +222,6 @@ export class IngestService {
     return { saved };
   }
 
-  // ── Shorts ───────────────────────────────────────────────────────────────
-  // Writes to `shorts` table, not `videos` — no queue push needed.
-
   async ingestShorts(dto: IngestShortsDto) {
     let saved = 0;
 
@@ -278,9 +265,6 @@ export class IngestService {
     return { saved };
   }
 
-  // ── Channel Videos ───────────────────────────────────────────────────────
-  // Saves channel videos to `videos` table and queues detail crawl per video.
-
   async ingestChannelVideos(dto: IngestChannelVideosDto) {
     let saved = 0;
 
@@ -323,9 +307,6 @@ export class IngestService {
     return { saved };
   }
 
-  // ── Playlists ─────────────────────────────────────────────────────────────
-  // Saves playlist metadata to `playlists` table (no items — list-level only).
-
   async ingestPlaylists(dto: IngestPlaylistsDto) {
     let saved = 0;
 
@@ -361,8 +342,6 @@ export class IngestService {
     });
     return { saved };
   }
-
-  // ── Playlist Items ────────────────────────────────────────────────────────
 
   async ingestPlaylistItems(dto: IngestPlaylistItemsDto) {
     const playlistId = dto.playlistId;
@@ -419,12 +398,7 @@ export class IngestService {
     return { saved };
   }
 
-  // ── Repair ───────────────────────────────────────────────────────────────
-  // Finds playlist items whose video is missing or has never been detail-crawled,
-  // then re-queues them. Safe to call multiple times — BullMQ deduplicates by jobId.
-
   async repairPlaylistVideos() {
-    // Videos referenced in playlist_items but not in videos table
     const orphaned = await this.prisma.$queryRaw<{ video_id: string }[]>`
       SELECT DISTINCT pi.video_id
       FROM playlist_items pi
@@ -432,7 +406,6 @@ export class IngestService {
       WHERE v.id IS NULL
     `;
 
-    // Videos that exist but never got detail-crawled
     const incomplete = await this.prisma.video.findMany({
       where: {
         playlistItems: { some: {} },
@@ -445,7 +418,6 @@ export class IngestService {
     const incompleteIds = incomplete.map((v) => v.id);
     const allIds = [...new Set([...orphanIds, ...incompleteIds])];
 
-    // Create stub records for any truly orphaned IDs so FK is satisfied
     for (const videoId of orphanIds) {
       await this.prisma.video.upsert({
         where: { id: videoId },
@@ -469,8 +441,6 @@ export class IngestService {
       queued: allIds.length,
     };
   }
-
-  // ── Comments ──────────────────────────────────────────────────────────────
 
   async ingestComments(dto: IngestCommentsDto) {
     const videoExists = await this.prisma.video.findUnique({
@@ -525,5 +495,80 @@ export class IngestService {
       count: saved,
     });
     return { saved };
+  }
+
+  sync(): { status: string } {
+    setImmediate(() => void this._runSync());
+    return { status: "started" };
+  }
+
+  private async _runSync() {
+    this.logger.info("[Sync] Starting post-collection sync");
+
+    const repair = await this.repairPlaylistVideos();
+    this.logger.info("[Sync] Repair done", repair);
+
+    const MAX_WAIT_MS = 30 * 60_000;
+    const POLL_INTERVAL_MS = 15_000;
+    const deadline = Date.now() + MAX_WAIT_MS;
+
+    while (Date.now() < deadline) {
+      const counts = await this.queue.getCrawlQueueCounts();
+      const pending =
+        (counts.waiting ?? 0) + (counts.active ?? 0) + (counts.delayed ?? 0);
+      this.logger.info("[Sync] Queue status", counts);
+      if (pending === 0) break;
+      await new Promise((r) => setTimeout(r, POLL_INTERVAL_MS));
+    }
+
+    const result = await this.cleanup();
+    this.logger.info("[Sync] Cleanup done", result);
+    this.logger.info("[Sync] Sync complete");
+  }
+
+  async cleanup() {
+    const junkVideos = await this.prisma.$queryRaw<{ id: string }[]>`
+      SELECT v.id
+      FROM videos v
+      WHERE v.channel_id IS NULL
+        AND v.channel_name IS NULL
+        AND v.detail_crawled_at IS NULL
+    `;
+    const junkIds = junkVideos.map((r) => r.id);
+
+    let videosDeleted = 0;
+    if (junkIds.length > 0) {
+      await this.prisma.playlistItem.deleteMany({
+        where: { videoId: { in: junkIds } },
+      });
+      const result = await this.prisma.video.deleteMany({
+        where: { id: { in: junkIds } },
+      });
+      videosDeleted = result.count;
+
+      for (const id of junkIds) {
+        void this.algolia.deleteObject(ALGOLIA_VIDEO_INDEX, id);
+      }
+    }
+
+    const orphanChannels = await this.prisma.$queryRaw<{ id: string }[]>`
+      SELECT c.id
+      FROM channels c
+      WHERE NOT EXISTS (SELECT 1 FROM videos v WHERE v.channel_id = c.id)
+        AND NOT EXISTS (SELECT 1 FROM playlists p WHERE p.channel_id = c.id)
+        AND NOT EXISTS (SELECT 1 FROM shorts s WHERE s.channel_id = c.id)
+    `;
+    const orphanChannelIds = orphanChannels.map((r) => r.id);
+
+    let channelsDeleted = 0;
+    if (orphanChannelIds.length > 0) {
+      const result = await this.prisma.channel.deleteMany({
+        where: { id: { in: orphanChannelIds } },
+      });
+      channelsDeleted = result.count;
+    }
+
+    this.logger.info("Cleanup complete", { videosDeleted, channelsDeleted });
+    return { videosDeleted, channelsDeleted };
   }
 }

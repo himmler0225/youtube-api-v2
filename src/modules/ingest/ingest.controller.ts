@@ -1,4 +1,5 @@
 import { Body, Controller, Post, UseGuards, HttpCode } from "@nestjs/common";
+import { ApiSecurity, ApiTags } from "@nestjs/swagger";
 import { SkipThrottle } from "@nestjs/throttler";
 import { IngestService } from "./ingest.service";
 import { IngestGuard } from "./ingest.guard";
@@ -15,6 +16,8 @@ import {
 } from "./dto";
 
 @SkipThrottle()
+@ApiTags("internal")
+@ApiSecurity("x-service-key")
 @Controller("internal/ingest")
 @UseGuards(IngestGuard)
 export class IngestController {
@@ -69,5 +72,17 @@ export class IngestController {
   @HttpCode(200)
   repairPlaylistVideos() {
     return this.ingestService.repairPlaylistVideos();
+  }
+
+  @Post("cleanup")
+  @HttpCode(200)
+  cleanup() {
+    return this.ingestService.cleanup();
+  }
+
+  @Post("sync")
+  @HttpCode(200)
+  sync() {
+    return this.ingestService.sync();
   }
 }

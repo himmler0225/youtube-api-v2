@@ -55,7 +55,10 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
   }
 
   async set(key: string, value: unknown, ttlSeconds = 300): Promise<void> {
-    await this.client.set(key, JSON.stringify(value), "EX", ttlSeconds);
+    const serialized = JSON.stringify(value, (_k, v) =>
+      typeof v === "bigint" ? Number(v) : v,
+    );
+    await this.client.set(key, serialized, "EX", ttlSeconds);
   }
 
   async del(key: string): Promise<void> {
@@ -66,14 +69,12 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
     return (await this.client.exists(key)) > 0;
   }
 
-  // Sliding window rate limit — trả về số lần trong window (chỉ đọc, không ghi)
   async slidingWindowCount(key: string, windowMs: number): Promise<number> {
     const windowStart = Date.now() - windowMs;
     await this.client.zremrangebyscore(key, 0, windowStart);
     return this.client.zcard(key);
   }
 
-  // Ghi 1 event vào sliding window (gọi khi login thất bại)
   async slidingWindowAdd(key: string, windowMs: number): Promise<void> {
     const now = Date.now();
     const member = `${now}-${randomBytes(4).toString("hex")}`;

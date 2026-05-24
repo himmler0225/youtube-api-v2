@@ -1,9 +1,3 @@
-/**
- * HTTP client gọi youtube-crawler — dùng cho các request real-time
- * (video live, video chưa có trong DB).
- *
- * Crawler yêu cầu header X-API-Key (cùng key đã cấu hình trong crawler .env).
- */
 import { Injectable, ServiceUnavailableException } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { AppLogger } from "@/base/logger/app-logger.service";
@@ -49,12 +43,12 @@ export class CrawlerClientService {
       }
       return res.json() as Promise<T>;
     } catch (error) {
-      this.logger.warn("Crawler request failed", { path, error });
+      const msg = error instanceof Error ? error.message : String(error);
+      this.logger.warn("Crawler request failed", { path, error: msg });
       throw new ServiceUnavailableException("Crawler service unavailable");
     }
   }
 
-  /** Lấy chi tiết một video — bao gồm cả live video */
   async getVideoDetail(videoId: string): Promise<CrawlerVideoResult> {
     const data = await this._fetch<{ detail: CrawlerVideoResult }>(
       `/api/video/${videoId}`,
@@ -62,7 +56,6 @@ export class CrawlerClientService {
     return data.detail;
   }
 
-  /** Lấy comment của video */
   async getComments(
     videoId: string,
     page = 1,
@@ -78,7 +71,6 @@ export class CrawlerClientService {
     return data.comments;
   }
 
-  /** Lấy danh sách Shorts từ YouTube Shorts feed */
   async getShorts(limit = 30): Promise<CrawlerShort[]> {
     const params = new URLSearchParams({ limit: String(limit) });
     const data = await this._fetch<{ videos: CrawlerShort[] }>(
@@ -87,7 +79,6 @@ export class CrawlerClientService {
     return data.videos;
   }
 
-  /** Tìm video đang live theo từ khóa */
   async getLiveVideos(
     query: string,
     page = 1,

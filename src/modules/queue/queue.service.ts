@@ -26,6 +26,15 @@ export class QueueService {
     );
   }
 
+  async getCrawlQueueCounts() {
+    return this.crawlQueue.getJobCounts(
+      "waiting",
+      "active",
+      "delayed",
+      "failed",
+    );
+  }
+
   async addLabel(videoId: string): Promise<void> {
     await this.labelQueue.add(
       "label",

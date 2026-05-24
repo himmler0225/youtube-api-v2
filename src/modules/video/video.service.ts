@@ -1,7 +1,3 @@
-/**
- * VideoService — pattern nhất quán cho tất cả endpoints:
- *   DB first → miss/live → crawl → lưu DB → trả về
- */
 import { Injectable } from "@nestjs/common";
 import { AppException } from "@/base/errors/app.exception";
 import { PrismaService } from "@/modules/prisma/prisma.service";
@@ -19,8 +15,8 @@ import {
   ALGOLIA_VIDEO_INDEX,
 } from "@/modules/algolia/algolia.service";
 
-const LIVE_VIDEO_TTL = 60; // seconds
-const LIVE_SEARCH_TTL = 30; // seconds
+const LIVE_VIDEO_TTL = 60;
+const LIVE_SEARCH_TTL = 30;
 
 @Injectable()
 export class VideoService {
@@ -49,6 +45,12 @@ export class VideoService {
   async getComments(videoId: string, page = 1, limit = 30) {
     const skip = (page - 1) * limit;
 
+    const video = await this.prisma.video.findUnique({
+      where: { id: videoId },
+      select: { isLiveContent: true },
+    });
+    if (video?.isLiveContent) return { videoId, total: 0, page, limit, comments: [] };
+
     const dbCount = await this.prisma.comment.count({
       where: { videoId, parentId: null },
     });
@@ -64,7 +66,6 @@ export class VideoService {
       return { videoId, total: dbCount, page, limit, comments };
     }
 
-    // Skip crawler call if we already tried recently and got nothing
     const crawlKey = `comments:crawled:${videoId}`;
     const alreadyTried = await this.redis.get<boolean>(crawlKey);
     if (alreadyTried) {
@@ -75,7 +76,6 @@ export class VideoService {
     try {
       const crawled = await this.crawler.getComments(videoId, 1, 100);
       await this._saveComments(videoId, crawled);
-      // Cache that we attempted so we don't spam the crawler (TTL = 10 min)
       await this.redis.set(crawlKey, true, 600);
     } catch (err) {
       this.logger.warn("Failed to fetch comments from crawler", {
@@ -117,7 +117,6 @@ export class VideoService {
         );
       }
 
-      // Fallback: Postgres full-text search
       const rows = await this.prisma.$queryRaw<{ id: string }[]>`
         SELECT id FROM videos
         WHERE tsv @@ plainto_tsquery('simple', ${query})
@@ -226,28 +225,79 @@ export class VideoService {
   async getRelatedVideos(videoId: string, limit = 10) {
     const video = await this.prisma.video.findUnique({
       where: { id: videoId },
-      select: { channelId: true },
+      select: {
+        channelId: true,
+        title: true,
+        label: { select: { category: true } },
+      },
     });
+
     const channelId = video?.channelId ?? null;
+    const category = video?.label?.category ?? null;
+    const title = video?.title ?? "";
+    const results: { id: string }[] = [];
 
-    const sameChannel = channelId
-      ? await this.prisma.video.findMany({
-          where: { isAvailable: true, id: { not: videoId }, channelId },
-          take: limit,
-          orderBy: { crawledAt: "desc" },
-        })
-      : [];
+    const slotChannel = Math.ceil(limit * 0.4);
+    const slotCategory = Math.ceil(limit * 0.4);
 
-    if (sameChannel.length >= limit) return sameChannel;
+    const exclude = () => [videoId, ...results.map((v) => v.id)];
 
-    const excludeIds = [videoId, ...sameChannel.map((v) => v.id)];
-    const fill = await this.prisma.video.findMany({
-      where: { isAvailable: true, id: { notIn: excludeIds } },
-      take: limit - sameChannel.length,
-      orderBy: { crawledAt: "desc" },
+    if (channelId) {
+      const rows = await this.prisma.video.findMany({
+        where: { isAvailable: true, id: { not: videoId }, channelId },
+        select: { id: true },
+        take: slotChannel,
+        orderBy: { crawledAt: "desc" },
+      });
+      results.push(...rows);
+    }
+
+    if (category && results.length < limit) {
+      const rows = await this.prisma.video.findMany({
+        where: {
+          isAvailable: true,
+          id: { notIn: exclude() },
+          label: { category },
+        },
+        select: { id: true },
+        take: slotCategory,
+        orderBy: { crawledAt: "desc" },
+      });
+      results.push(...rows);
+    }
+
+    if (title && results.length < limit) {
+      type Row = { id: string };
+      const rows = await this.prisma.$queryRaw<Row[]>`
+        SELECT v.id
+        FROM videos v
+        WHERE v.is_available = true
+          AND v.id != ${videoId}
+          AND v.id != ALL(${exclude()})
+          AND v.tsv @@ plainto_tsquery('simple', ${title})
+        ORDER BY ts_rank(v.tsv, plainto_tsquery('simple', ${title})) DESC
+        LIMIT ${limit - results.length}
+      `;
+      results.push(...rows);
+    }
+
+    if (results.length < limit) {
+      const rows = await this.prisma.video.findMany({
+        where: { isAvailable: true, id: { notIn: exclude() } },
+        select: { id: true },
+        take: limit - results.length,
+        orderBy: { crawledAt: "desc" },
+      });
+      results.push(...rows);
+    }
+
+    const ids = results.map((r) => r.id);
+    const videos = await this.prisma.video.findMany({
+      where: { id: { in: ids } },
     });
 
-    return [...sameChannel, ...fill];
+    const map = new Map(videos.map((v) => [v.id, v]));
+    return ids.map((id) => map.get(id)).filter(Boolean);
   }
 
   async getChannel(channelId: string) {
