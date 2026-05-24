@@ -13,9 +13,10 @@ FROM node:20-alpine
 WORKDIR /app
 COPY package*.json ./
 RUN npm ci --omit=dev
-COPY --from=builder /app/dist        ./dist
-COPY --from=builder /app/generated   ./generated
-COPY --from=builder /app/prisma      ./prisma
+COPY --from=builder /app/dist             ./dist
+COPY --from=builder /app/generated        ./generated
+COPY --from=builder /app/prisma           ./prisma
+COPY --from=builder /app/prisma.config.ts ./prisma.config.ts
 EXPOSE 3000
 # migrate + start — migrations idempotent nên an toàn khi restart
 CMD ["sh", "-c", "npx prisma migrate deploy && node dist/src/main"]
