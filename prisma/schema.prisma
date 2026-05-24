@@ -70,6 +70,8 @@ model User {
   subscriptions Subscription[]
   watchHistory  WatchHistory[]
   videoLikes    VideoLike[]
+  comments      Comment[]
+  commentLikes  CommentLike[]
 
   @@index([status])
   @@map("users")
@@ -274,6 +276,9 @@ model Comment {
   parent   Comment?  @relation("CommentReplies", fields: [parentId], references: [id], onDelete: SetNull)
   replies  Comment[] @relation("CommentReplies")
 
+  userId String? @map("user_id")
+  user   User?   @relation(fields: [userId], references: [id], onDelete: SetNull)
+
   author       String
   avatar       String?
   content      String   @db.Text
@@ -282,11 +287,26 @@ model Comment {
   publishedTimeText String? @map("published_time_text")
 
   crawledAt DateTime @default(now()) @map("crawled_at")
+  likes     CommentLike[]
 
   @@index([videoId])
   @@index([parentId])
   @@index([videoId, crawledAt])
+  @@index([userId])
   @@map("comments")
+}
+
+model CommentLike {
+  userId    String  @map("user_id")
+  commentId String  @map("comment_id")
+
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  comment Comment @relation(fields: [commentId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@id([userId, commentId])
+  @@map("comment_likes")
 }
 
 model Playlist {

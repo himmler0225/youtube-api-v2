@@ -16,6 +16,7 @@ import { AlgoliaModule } from "./modules/algolia/algolia.module";
 import { LiveModule } from "./modules/live/live.module";
 import { AiLabelModule } from "./modules/ai-label/ai-label.module";
 import { PublicUserModule } from "./modules/public-user/public-user.module";
+import { CommentModule } from "./modules/comment/comment.module";
 
 @Module({
   imports: [
@@ -34,6 +35,7 @@ import { PublicUserModule } from "./modules/public-user/public-user.module";
     LiveModule,
     AiLabelModule,
     PublicUserModule,
+    CommentModule,
   ],
   providers: [AppLogger, { provide: APP_GUARD, useClass: ThrottlerGuard }],
 })
