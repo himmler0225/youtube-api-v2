@@ -52,6 +52,12 @@ export class VideoController {
     );
   }
 
+  @ApiOperation({ summary: "Get distinct AI-labeled categories" })
+  @Get("categories")
+  getCategories() {
+    return this.videoService.getCategories();
+  }
+
   @ApiOperation({ summary: "Get video detail — DB first, miss → crawler" })
   @Get(":id")
   findOne(@Param("id") id: string) {
@@ -62,12 +68,6 @@ export class VideoController {
   @Get(":id/related")
   getRelated(@Param("id") id: string, @Query("limit") limit = 10) {
     return this.videoService.getRelatedVideos(id, Number(limit));
-  }
-
-  @ApiOperation({ summary: "Get distinct AI-labeled categories" })
-  @Get("categories")
-  getCategories() {
-    return this.videoService.getCategories();
   }
 
   @ApiOperation({ summary: "Get video comments" })
