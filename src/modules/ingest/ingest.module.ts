@@ -11,11 +11,11 @@ import { ChannelRepository } from "./repositories/channel.repository";
 import { VideoRepository } from "./repositories/video.repository";
 import { CommentRepository } from "./repositories/comment.repository";
 import { AppLogger } from "@/base/logger/app-logger.service";
-import { ElasticModule } from "@/modules/elastic/elastic.module";
+import { AlgoliaModule } from "@/modules/algolia/algolia.module";
 import { SnakeToCamelMiddleware } from "@/base/middleware/snake-to-camel.middleware";
 
 @Module({
-  imports: [ElasticModule],
+  imports: [AlgoliaModule],
   controllers: [IngestController],
   providers: [
     IngestService,

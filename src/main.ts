@@ -4,6 +4,7 @@ import { AppLogger, AllExceptionsFilter, ResponseInterceptor } from "./base";
 import { ValidationPipe } from "@nestjs/common";
 import { DocumentBuilder, SwaggerModule } from "@nestjs/swagger";
 import helmet from "helmet";
+import { json } from "express";
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule, { bufferLogs: true });
@@ -26,6 +27,7 @@ async function bootstrap() {
     typeof value === "bigint" ? Number(value) : value,
   );
 
+  app.use(json({ limit: "10mb" }));
   app.use(helmet());
 
   app.useGlobalPipes(

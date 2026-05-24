@@ -6,3 +6,4 @@ export { IngestTrendingDto } from "./ingest-trending.dto";
 export { IngestShortsDto } from "./ingest-shorts.dto";
 export { IngestChannelVideosDto } from "./ingest-channel-videos.dto";
 export { IngestPlaylistsDto } from "./ingest-playlists.dto";
+export { IngestPlaylistItemsDto } from "./ingest-playlist-items.dto";

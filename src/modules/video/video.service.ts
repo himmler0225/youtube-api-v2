@@ -14,7 +14,10 @@ import {
 } from "@/modules/crawler-client/crawler-client.service";
 import type { CrawlerShort } from "@/modules/crawler-client/types";
 import { AppLogger } from "@/base/logger/app-logger.service";
-import { ElasticService } from "../elastic/elastic.service";
+import {
+  AlgoliaService,
+  ALGOLIA_VIDEO_INDEX,
+} from "@/modules/algolia/algolia.service";
 
 const LIVE_VIDEO_TTL = 60; // seconds
 const LIVE_SEARCH_TTL = 30; // seconds
@@ -26,7 +29,7 @@ export class VideoService {
     private readonly redis: RedisService,
     private readonly crawler: CrawlerClientService,
     private readonly logger: AppLogger,
-    private readonly elastic: ElasticService,
+    private readonly algolia: AlgoliaService,
   ) {}
 
   async findOne(videoId: string) {
@@ -80,33 +83,20 @@ export class VideoService {
 
     if (query) {
       try {
-        const es = this.elastic.getClient();
-        const res = await es.search({
-          index: "videos",
-          from: offset,
-          size: limit,
-          query: {
-            multi_match: {
-              query,
-              fields: ["title^3", "channelName", "description"],
-              fuzziness: "AUTO",
-            },
-          },
-        });
-
-        const hits = res.hits.hits;
-        const total =
-          typeof res.hits.total === "number"
-            ? res.hits.total
-            : (res.hits.total?.value ?? 0);
+        const { hits, total } = await this.algolia.search(
+          ALGOLIA_VIDEO_INDEX,
+          query,
+          { hitsPerPage: limit, page: page - 1 },
+        );
 
         if (hits.length > 0) {
-          return { total, page, limit, videos: hits.map((h) => h._source) };
+          return { total, page, limit, videos: hits };
         }
       } catch {
-        this.logger.warn("ES search failed — falling back to Postgres FTS", {
-          query,
-        });
+        this.logger.warn(
+          "Algolia search failed — falling back to Postgres FTS",
+          { query },
+        );
       }
 
       // Fallback: Postgres full-text search
@@ -173,12 +163,14 @@ export class VideoService {
         create: {
           id: videoId,
           title: s.title || videoId,
+          url: s.url,
           channelName: s.channel_name || null,
           viewCount: s.view_count ? BigInt(s.view_count) : null,
           thumbnails: s.thumbnails ?? [],
         },
         update: {
           title: s.title || videoId,
+          url: s.url,
           channelName: s.channel_name || null,
           viewCount: s.view_count ? BigInt(s.view_count) : null,
           thumbnails: s.thumbnails ?? [],
@@ -203,7 +195,7 @@ export class VideoService {
     };
   }
 
-  async searchLive(query: string, page = 1, limit = 30) {
+  async searchLive(query = "", page = 1, limit = 30) {
     const cacheKey = `live:search:${query}:${page}:${limit}`;
     const cached = await this.redis.get<object[]>(cacheKey);
     if (cached) return { videos: cached, fromCache: true };
@@ -315,6 +307,13 @@ export class VideoService {
     }
 
     return video;
+  }
+
+  async getCategories(): Promise<string[]> {
+    const rows = await this.prisma.$queryRaw<Array<{ category: string }>>`
+      SELECT DISTINCT category FROM video_labels ORDER BY category
+    `;
+    return rows.map((r) => r.category);
   }
 
   private async _saveComments(videoId: string, comments: CrawlerComment[]) {

@@ -3,11 +3,12 @@ import { VideoController } from "./video.controller";
 import { ChannelController } from "./channel.controller";
 import { VideoService } from "./video.service";
 import { AppLogger } from "@/base/logger/app-logger.service";
-import { ElasticModule } from "@/modules/elastic/elastic.module";
+import { AlgoliaModule } from "@/modules/algolia/algolia.module";
 
 @Module({
-  imports: [ElasticModule],
+  imports: [AlgoliaModule],
   controllers: [VideoController, ChannelController],
   providers: [VideoService, AppLogger],
+  exports: [VideoService],
 })
 export class VideoModule {}

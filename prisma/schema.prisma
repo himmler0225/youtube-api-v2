@@ -23,6 +23,12 @@ enum SessionStatus {
   EXPIRED
 }
 
+enum MenuType {
+  MAIN
+  EXPLORE
+  SETTINGS
+}
+
 enum AuthEventType {
   LOGIN_SUCCESS
   LOGIN_FAILED
@@ -57,6 +63,10 @@ model User {
 
   createdAt       DateTime @default(now()) @map("created_at")
   updatedAt       DateTime @updatedAt      @map("updated_at")
+
+  subscriptions Subscription[]
+  watchHistory  WatchHistory[]
+  videoLikes    VideoLike[]
 
   @@index([status])
   @@map("users")
@@ -140,12 +150,15 @@ model Channel {
   avatar String?
   banner String?
 
+subscriberCount BigInt? @map("subscriber_count")
   subscriberCountText String? @map("subscriber_count_text")
   description         String? @db.Text
 
   videos    Video[]
   shorts    Short[]
   playlists Playlist[]
+
+  subscriptions Subscription[]
 
   crawledAt DateTime @default(now()) @map("crawled_at")
   updatedAt DateTime @updatedAt      @map("updated_at")
@@ -182,6 +195,9 @@ model Video {
   trendingSnapshots TrendingSnapshot[]
   searchResults     SearchResult[]
   playlistItems     PlaylistItem[]
+  watchHistory WatchHistory[]
+  videoLikes   VideoLike[]
+  label        VideoLabel?
 
   crawledAt  DateTime  @default(now()) @map("crawled_at")
   updatedAt  DateTime  @updatedAt      @map("updated_at")
@@ -196,6 +212,7 @@ model Short {
   id              String   @id
 
   title           String
+  url             String
   channelId       String?  @map("channel_id")
   channel         Channel? @relation(fields: [channelId], references: [id], onDelete: SetNull)
   channelName     String?  @map("channel_name")
@@ -301,4 +318,165 @@ model PlaylistItem {
   @@unique([playlistId, videoId])
   @@index([videoId])
   @@map("playlist_items")
+}
+
+model Menu {
+  id          String   @id @default(cuid())
+
+  name        String
+  slug        String   @unique
+
+  icon        String?
+  path        String?
+
+  parentId    String?
+
+  position    Int      @default(0)
+
+  isVisible   Boolean  @default(true)
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  type MenuType @default(MAIN)
+
+  @@index([parentId])
+
+  @@map("menus")
+}
+
+model Subscription {
+  id        BigInt   @id @default(autoincrement())
+
+  userId    String   @map("user_id")
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  channelId String   @map("channel_id")
+  channel   Channel  @relation(fields: [channelId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@unique([userId, channelId])
+  @@index([userId])
+  @@index([channelId])
+
+  @@map("subscriptions")
+}
+
+model WatchHistory {
+  id        BigInt   @id @default(autoincrement())
+
+  userId    String   @map("user_id")
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  videoId   String   @map("video_id")
+  video     Video    @relation(fields: [videoId], references: [id], onDelete: Cascade)
+
+  progress  Int      @default(0)
+
+  watchedAt DateTime @default(now()) @map("watched_at")
+
+  @@unique([userId, videoId])
+
+  @@index([userId, watchedAt])
+  @@index([videoId])
+
+  @@map("watch_history")
+}
+
+model VideoLike {
+  id        BigInt   @id @default(autoincrement())
+
+  userId    String   @map("user_id")
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  videoId   String   @map("video_id")
+  video     Video    @relation(fields: [videoId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@unique([userId, videoId])
+
+  @@index([videoId])
+  @@index([userId])
+
+  @@map("video_likes")
+}
+
+model PlaylistLike {
+  id          BigInt   @id @default(autoincrement())
+
+  userId      String   @map("user_id")
+  playlistId  String   @map("playlist_id")
+
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  @@unique([userId, playlistId])
+
+  @@index([userId])
+  @@index([playlistId])
+
+  @@map("playlist_likes")
+}
+
+model SavedPlaylist {
+  id          BigInt   @id @default(autoincrement())
+
+  userId      String   @map("user_id")
+  playlistId  String   @map("playlist_id")
+
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  @@unique([userId, playlistId])
+
+  @@index([userId])
+
+  @@map("saved_playlists")
+}
+
+model SystemConfig {
+  key         String   @id
+
+  value       Json
+
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt      @map("updated_at")
+
+  @@map("system_configs")
+}
+
+model Category {
+  id    String @id
+  name  String
+
+  createdAt DateTime @default(now())
+
+  @@map("categories")
+}
+
+model VideoLabel {
+  id        BigInt   @id @default(autoincrement())
+  videoId   String   @unique @map("video_id")
+  video     Video    @relation(fields: [videoId], references: [id], onDelete: Cascade)
+  category  String
+  quality   Int      @default(2)
+  labeledAt DateTime @default(now()) @map("labeled_at")
+
+  @@index([category])
+  @@map("video_labels")
+}
+
+model UserPlaylist {
+  id          String @id @default(uuid())
+
+  userId      String @map("user_id")
+
+  name        String
+  description String?
+
+  createdAt   DateTime @default(now())
+
+  @@index([userId])
+
+  @@map("user_playlists")
 }

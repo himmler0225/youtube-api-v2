@@ -2,9 +2,11 @@ export type CrawlerVideoDetail = {
   video_id: string;
   title: string;
   author: string;
+  channel_id?: string;
   length_seconds: string;
   views: number;
   is_live_content: boolean;
+  description?: string;
 };
 
 export type CrawlerVideoError = {

@@ -11,6 +11,7 @@ import {
   IngestShortsDto,
   IngestChannelVideosDto,
   IngestPlaylistsDto,
+  IngestPlaylistItemsDto,
 } from "./dto";
 
 @SkipThrottle()
@@ -57,5 +58,10 @@ export class IngestController {
   @Post("playlists")
   ingestPlaylists(@Body() dto: IngestPlaylistsDto) {
     return this.ingestService.ingestPlaylists(dto);
+  }
+
+  @Post("playlist-items")
+  ingestPlaylistItems(@Body() dto: IngestPlaylistItemsDto) {
+    return this.ingestService.ingestPlaylistItems(dto);
   }
 }

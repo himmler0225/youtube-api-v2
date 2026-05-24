@@ -12,7 +12,9 @@ import { VideoModule } from "./modules/video/video.module";
 import { QueueModule } from "./modules/queue/queue.module";
 import { CrawlWorkerModule } from "./modules/crawl-worker/crawl-worker.module";
 import { HealthModule } from "./modules/health/health.module";
-import { ElasticModule } from "./modules/elastic/elastic.module";
+import { AlgoliaModule } from "./modules/algolia/algolia.module";
+import { LiveModule } from "./modules/live/live.module";
+import { AiLabelModule } from "./modules/ai-label/ai-label.module";
 
 @Module({
   imports: [
@@ -20,7 +22,7 @@ import { ElasticModule } from "./modules/elastic/elastic.module";
     ThrottlerModule.forRoot([{ ttl: 60000, limit: 200 }]),
     PrismaModule,
     RedisModule,
-    ElasticModule,
+    AlgoliaModule,
     CrawlerClientModule,
     QueueModule,
     AuthModule,
@@ -28,6 +30,8 @@ import { ElasticModule } from "./modules/elastic/elastic.module";
     VideoModule,
     CrawlWorkerModule,
     HealthModule,
+    LiveModule,
+    AiLabelModule,
   ],
   providers: [AppLogger, { provide: APP_GUARD, useClass: ThrottlerGuard }],
 })

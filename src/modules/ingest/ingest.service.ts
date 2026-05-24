@@ -6,7 +6,10 @@ import { VideoRepository } from "./repositories/video.repository";
 import { CommentRepository } from "./repositories/comment.repository";
 import { QueueService } from "@/modules/queue/queue.service";
 import { AppLogger } from "@/base/logger/app-logger.service";
-import { ElasticService } from "@/modules/elastic/elastic.service";
+import {
+  AlgoliaService,
+  ALGOLIA_VIDEO_INDEX,
+} from "@/modules/algolia/algolia.service";
 import {
   IngestSearchDto,
   IngestDetailDto,
@@ -16,6 +19,7 @@ import {
   IngestShortsDto,
   IngestChannelVideosDto,
   IngestPlaylistsDto,
+  IngestPlaylistItemsDto,
 } from "./dto";
 
 @Injectable()
@@ -27,7 +31,7 @@ export class IngestService {
     private readonly commentRepo: CommentRepository,
     private readonly queue: QueueService,
     private readonly logger: AppLogger,
-    private readonly elastic: ElasticService,
+    private readonly algolia: AlgoliaService,
   ) {}
 
   // ── Channel ──────────────────────────────────────────────────────────────
@@ -76,7 +80,7 @@ export class IngestService {
         thumbnails: video.thumbnails as unknown as Prisma.InputJsonValue,
       });
 
-      void this.elastic.indexVideo({
+      void this.algolia.indexData(ALGOLIA_VIDEO_INDEX, {
         id: upserted.id,
         title: upserted.title,
         channelId: upserted.channelId,
@@ -125,17 +129,33 @@ export class IngestService {
       return { videoId, available: false };
     }
 
+    const dtoTitle = dto.title;
+    const dtoDescription = dto.description;
+    const dtoChannelId = dto.channelId || null;
+    const dtoAuthor = dto.author || null;
+    const viewCount = dto.views ? BigInt(dto.views) : null;
+
+    if (dtoChannelId && dtoAuthor) {
+      await this.channelRepo.upsert({ id: dtoChannelId, name: dtoAuthor });
+    }
+
     const detail = await this.videoRepo.upsertFromDetail({
       id: videoId,
-      title: dto.title ?? videoId,
-      channelName: dto.author,
-      viewCount: dto.views ? BigInt(dto.views) : null,
+      title: dtoTitle ?? videoId,
+      channelId: dtoChannelId,
+      channelName: dtoAuthor,
+      viewCount,
+      viewsText:
+        viewCount != null
+          ? `${Number(viewCount).toLocaleString("en-US")} views`
+          : null,
       durationSeconds: dto.lengthSeconds ? Number(dto.lengthSeconds) : null,
       isLiveContent: dto.isLiveContent ?? false,
       isAvailable: true,
+      descriptionSnippet: dtoDescription ?? null,
     });
 
-    void this.elastic.indexVideo({
+    void this.algolia.indexData(ALGOLIA_VIDEO_INDEX, {
       id: detail.id,
       title: detail.title,
       channelId: detail.channelId,
@@ -178,7 +198,7 @@ export class IngestService {
         thumbnails: video.thumbnails as unknown as Prisma.InputJsonValue,
       });
 
-      void this.elastic.indexVideo({
+      void this.algolia.indexData(ALGOLIA_VIDEO_INDEX, {
         id: upsertedTrending.id,
         title: upsertedTrending.title,
         channelId: upsertedTrending.channelId,
@@ -231,6 +251,7 @@ export class IngestService {
         create: {
           id: videoId,
           title: video.title || videoId,
+          url: video.url ?? "",
           channelId: video.channelId ?? null,
           channelName: video.channelName ?? null,
           viewCount,
@@ -239,6 +260,7 @@ export class IngestService {
         },
         update: {
           title: video.title || videoId,
+          url: video.url ?? "",
           channelId: video.channelId ?? null,
           channelName: video.channelName ?? null,
           viewCount,
@@ -278,7 +300,7 @@ export class IngestService {
           Prisma.JsonNull,
       });
 
-      void this.elastic.indexVideo({
+      void this.algolia.indexData(ALGOLIA_VIDEO_INDEX, {
         id: upserted.id,
         title: upserted.title,
         channelId: upserted.channelId,
@@ -339,9 +361,72 @@ export class IngestService {
     return { saved };
   }
 
+  // ── Playlist Items ────────────────────────────────────────────────────────
+
+  async ingestPlaylistItems(dto: IngestPlaylistItemsDto) {
+    const playlistId = dto.playlistId;
+    const videos = dto.videos;
+
+    const playlist = await this.prisma.playlist.findUnique({
+      where: { id: playlistId },
+      select: { id: true },
+    });
+    if (!playlist) {
+      this.logger.warn("ingestPlaylistItems: playlist not in DB, skipping", {
+        playlistId,
+      });
+      return { saved: 0 };
+    }
+
+    let saved = 0;
+    for (const v of videos) {
+      const videoId = v.videoId;
+      const title = v.title || videoId;
+      const durationText = v.durationText;
+      const publishedTimeText = v.publishedTimeText;
+      const thumbnail = v.thumbnail;
+      const position = v.position;
+
+      await this.prisma.video.upsert({
+        where: { id: videoId },
+        create: {
+          id: videoId,
+          title,
+          durationText,
+          publishedTimeText,
+          thumbnails: thumbnail ? [{ url: thumbnail }] : [],
+        },
+        update: {},
+      });
+
+      await this.prisma.playlistItem.upsert({
+        where: {
+          playlistId_videoId: { playlistId, videoId },
+        },
+        create: { playlistId, videoId, position },
+        update: { position },
+      });
+      saved++;
+    }
+
+    this.logger.info("Playlist items ingested", { playlistId, count: saved });
+    return { saved };
+  }
+
   // ── Comments ──────────────────────────────────────────────────────────────
 
   async ingestComments(dto: IngestCommentsDto) {
+    const videoExists = await this.prisma.video.findUnique({
+      where: { id: dto.videoId },
+      select: { id: true },
+    });
+    if (!videoExists) {
+      this.logger.warn("ingestComments: video not in DB, skipping", {
+        videoId: dto.videoId,
+      });
+      return { saved: 0 };
+    }
+
     let saved = 0;
 
     for (const comment of dto.comments) {

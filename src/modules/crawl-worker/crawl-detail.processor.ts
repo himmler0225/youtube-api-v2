@@ -6,13 +6,17 @@ import {
 } from "@/modules/crawler-client/crawler-client.service";
 import { IngestService } from "@/modules/ingest/ingest.service";
 import { AppLogger } from "@/base/logger/app-logger.service";
-import { CRAWL_DETAIL_QUEUE } from "@/modules/queue/queue.service";
+import {
+  CRAWL_DETAIL_QUEUE,
+  QueueService,
+} from "@/modules/queue/queue.service";
 
 @Processor(CRAWL_DETAIL_QUEUE, { concurrency: 3 })
 export class CrawlDetailProcessor extends WorkerHost {
   constructor(
     private readonly crawler: CrawlerClientService,
     private readonly ingest: IngestService,
+    private readonly queue: QueueService,
     private readonly logger: AppLogger,
   ) {
     super();
@@ -25,12 +29,7 @@ export class CrawlDetailProcessor extends WorkerHost {
     const result = await this.crawler.getVideoDetail(videoId);
 
     if ("error" in result && result.error) {
-      await this.ingest.ingestDetail({
-        videoId,
-        error: true,
-        reason: result.reason,
-      });
-      this.logger.warn("[CrawlWorker] Video unavailable", {
+      this.logger.warn("[CrawlWorker] Video unavailable, skipping", {
         videoId,
         reason: result.reason,
       });
@@ -42,12 +41,20 @@ export class CrawlDetailProcessor extends WorkerHost {
       videoId,
       title: d.title,
       author: d.author,
+      channelId: d.channel_id,
       views: d.views ? Number(d.views) : undefined,
       lengthSeconds: d.length_seconds ? Number(d.length_seconds) : undefined,
       isLiveContent: d.is_live_content,
+      description: d.description,
     });
 
     if (d.is_live_content) return;
+
+    try {
+      await this.queue.addLabel(videoId);
+    } catch {
+      /* empty */
+    }
 
     try {
       const comments = await this.crawler.getComments(videoId, 1, 100);

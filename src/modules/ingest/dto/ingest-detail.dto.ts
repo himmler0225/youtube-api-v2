@@ -38,4 +38,12 @@ export class IngestDetailDto {
   @IsBoolean()
   @IsOptional()
   isLiveContent?: boolean;
+
+  @IsString()
+  @IsOptional()
+  description?: string;
+
+  @IsString()
+  @IsOptional()
+  channelId?: string;
 }

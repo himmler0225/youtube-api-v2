@@ -49,24 +49,30 @@ export class VideoRepository extends BasePrismaRepository<Video> {
   upsertFromDetail(data: {
     id: string;
     title: string;
+    channelId?: string | null;
     channelName?: string | null;
     viewCount?: bigint | null;
+    viewsText?: string | null;
     durationSeconds?: number | null;
     isLiveContent?: boolean;
     isAvailable: boolean;
     unavailableReason?: string | null;
+    descriptionSnippet?: string | null;
   }) {
     return this.prisma.video.upsert({
       where: { id: data.id },
       create: data,
       update: {
         title: data.title,
+        channelId: data.channelId,
         channelName: data.channelName,
         viewCount: data.viewCount,
+        viewsText: data.viewsText,
         durationSeconds: data.durationSeconds,
         isLiveContent: data.isLiveContent ?? false,
         isAvailable: data.isAvailable,
         unavailableReason: data.unavailableReason,
+        descriptionSnippet: data.descriptionSnippet,
         detailCrawledAt: new Date(),
         updatedAt: new Date(),
       },

@@ -34,15 +34,19 @@ export class VideoController {
     return this.videoService.getShorts(pagination.page, pagination.limit);
   }
 
-  @ApiOperation({ summary: "Search live videos in real-time from crawler" })
-  @ApiQuery({ name: "q", required: true, description: "Search keyword" })
+  @ApiOperation({ summary: "Get live videos — optional keyword filter" })
+  @ApiQuery({
+    name: "q",
+    required: false,
+    description: "Search keyword (optional)",
+  })
   @Get("live")
   searchLive(
-    @Query("q") query: string,
+    @Query("q") query?: string,
     @Query() pagination: PaginationQueryDto = new PaginationQueryDto(),
   ) {
     return this.videoService.searchLive(
-      query,
+      query ?? "",
       pagination.page,
       pagination.limit,
     );
@@ -58,6 +62,12 @@ export class VideoController {
   @Get(":id/related")
   getRelated(@Param("id") id: string, @Query("limit") limit = 10) {
     return this.videoService.getRelatedVideos(id, Number(limit));
+  }
+
+  @ApiOperation({ summary: "Get distinct AI-labeled categories" })
+  @Get("categories")
+  getCategories() {
+    return this.videoService.getCategories();
   }
 
   @ApiOperation({ summary: "Get video comments" })
