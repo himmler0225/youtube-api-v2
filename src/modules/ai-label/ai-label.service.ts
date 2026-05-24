@@ -8,16 +8,11 @@ import {
   AI_CATEGORIES,
   VideoCategory,
   LABEL_QUEUE,
+  GROQ_API_URL,
+  GROQ_MODEL,
+  GROQ_SYSTEM_PROMPT,
+  GROQ_BATCH_SYSTEM_PROMPT,
 } from "./ai-label.constants";
-
-const GROQ_API_URL = "https://api.groq.com/openai/v1/chat/completions";
-const GROQ_MODEL = "llama-3.1-8b-instant";
-
-const SYSTEM_PROMPT = `You are a video content classifier. Given a video title and description, return ONLY valid JSON with:
-- "category": one of [${AI_CATEGORIES.join(", ")}]
-- "quality": integer 0–3 (0=spam/garbage, 1=low quality, 2=normal, 3=high quality)
-
-Respond ONLY with the JSON object, no markdown, no explanation.`;
 
 export interface ClassifyResult {
   category: VideoCategory;
@@ -67,7 +62,7 @@ export class AiLabelService {
           body: JSON.stringify({
             model: GROQ_MODEL,
             messages: [
-              { role: "system", content: SYSTEM_PROMPT },
+              { role: "system", content: GROQ_SYSTEM_PROMPT },
               { role: "user", content: userMsg },
             ],
             temperature: 0.1,
@@ -165,5 +160,99 @@ export class AiLabelService {
     });
 
     return { queued: unlabeled.length, total };
+  }
+
+  async backfillDirect(
+    batchSize = 20,
+  ): Promise<{ labeled: number; total: number; skipped: number }> {
+    const videos = await this.prisma.video.findMany({
+      where: { isAvailable: true, detailCrawledAt: { not: null }, label: null },
+      select: { id: true, title: true, descriptionSnippet: true },
+      take: batchSize,
+      orderBy: { detailCrawledAt: "desc" },
+    });
+
+    const remaining = await this.prisma.video.count({
+      where: { isAvailable: true, detailCrawledAt: { not: null }, label: null },
+    });
+
+    if (videos.length === 0) return { labeled: 0, total: 0, skipped: 0 };
+
+    const userMsg = videos
+      .map(
+        (v, i) =>
+          `${i + 1}. id="${v.id}" title="${v.title}" desc="${(v.descriptionSnippet ?? "").slice(0, 200)}"`,
+      )
+      .join("\n");
+
+    let results: { id: string; category: string; quality: number }[] = [];
+
+    try {
+      const res = await fetch(GROQ_API_URL, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${this.apiKey}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          model: GROQ_MODEL,
+          messages: [
+            { role: "system", content: GROQ_BATCH_SYSTEM_PROMPT },
+            { role: "user", content: userMsg },
+          ],
+          temperature: 0.1,
+          max_tokens: videos.length * 40,
+        }),
+      });
+
+      if (!res.ok) {
+        this.logger.warn("[AiLabel] Batch API error", { status: res.status });
+        return { labeled: 0, total: remaining, skipped: videos.length };
+      }
+
+      const body = (await res.json()) as {
+        choices: { message: { content: string } }[];
+      };
+      const text = body.choices[0]?.message.content.trim() ?? "[]";
+      results = JSON.parse(text) as typeof results;
+    } catch (err) {
+      this.logger.warn("[AiLabel] Batch classify failed", {
+        error: String(err),
+      });
+      return { labeled: 0, total: remaining, skipped: videos.length };
+    }
+
+    let labeled = 0;
+    let skipped = 0;
+
+    for (const item of results) {
+      const category = AI_CATEGORIES.includes(item.category as VideoCategory)
+        ? (item.category as VideoCategory)
+        : "Other";
+      const quality =
+        typeof item.quality === "number" &&
+        item.quality >= 0 &&
+        item.quality <= 3
+          ? Math.round(item.quality)
+          : 2;
+
+      try {
+        await this.prisma.videoLabel.upsert({
+          where: { videoId: item.id },
+          create: { videoId: item.id, category, quality },
+          update: { category, quality, labeledAt: new Date() },
+        });
+        labeled++;
+      } catch {
+        skipped++;
+      }
+    }
+
+    this.logger.info("[AiLabel] Batch labeled", {
+      labeled,
+      skipped,
+      remaining: remaining - labeled,
+    });
+    return { labeled, total: remaining, skipped };
   }
 }

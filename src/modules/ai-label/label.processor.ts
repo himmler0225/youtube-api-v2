@@ -18,6 +18,9 @@ export class LabelProcessor extends WorkerHost {
   async process(job: Job<{ videoId: string }>): Promise<void> {
     const { videoId } = job.data;
 
+    // 2 s spacing between Groq calls (free tier ~30 RPM)
+    await new Promise((r) => setTimeout(r, 2_000));
+
     const video = await this.prisma.video.findUnique({
       where: { id: videoId },
       select: { title: true, descriptionSnippet: true },

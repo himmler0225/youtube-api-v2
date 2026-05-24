@@ -7,8 +7,8 @@ export class PublicUserService {
   constructor(private readonly prisma: PrismaService) {}
 
   async getProfile(username: string) {
-    const user = await this.prisma.user.findUnique({
-      where: { username },
+    const user = await this.prisma.user.findFirst({
+      where: { OR: [{ username }, { displayName: username }] },
       select: {
         id: true,
         username: true,
@@ -38,8 +38,8 @@ export class PublicUserService {
   }
 
   async getComments(username: string, page = 1, limit = 20) {
-    const user = await this.prisma.user.findUnique({
-      where: { username },
+    const user = await this.prisma.user.findFirst({
+      where: { OR: [{ username }, { displayName: username }] },
       select: { displayName: true, username: true },
     });
     if (!user) throw AppException.notFound(`User @${username} not found`);
