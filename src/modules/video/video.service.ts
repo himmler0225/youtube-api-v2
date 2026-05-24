@@ -49,7 +49,8 @@ export class VideoService {
       where: { id: videoId },
       select: { isLiveContent: true },
     });
-    if (video?.isLiveContent) return { videoId, total: 0, page, limit, comments: [] };
+    if (video?.isLiveContent)
+      return { videoId, total: 0, page, limit, comments: [] };
 
     const dbCount = await this.prisma.comment.count({
       where: { videoId, parentId: null },
@@ -63,7 +64,13 @@ export class VideoService {
         skip,
         take: limit,
       });
-      return { videoId, total: dbCount, page, limit, comments };
+      return {
+        videoId,
+        total: dbCount,
+        page,
+        limit,
+        comments: await this._enrichComments(comments),
+      };
     }
 
     const crawlKey = `comments:crawled:${videoId}`;
@@ -93,7 +100,13 @@ export class VideoService {
       skip,
       take: limit,
     });
-    return { videoId, total: comments.length, page, limit, comments };
+    return {
+      videoId,
+      total: comments.length,
+      page,
+      limit,
+      comments: await this._enrichComments(comments),
+    };
   }
 
   async listVideos(query?: string, page = 1, limit = 20) {
@@ -382,6 +395,32 @@ export class VideoService {
       SELECT DISTINCT category FROM video_labels ORDER BY category
     `;
     return rows.map((r) => r.category);
+  }
+
+  private async _enrichComments(
+    comments: { author: string; replies?: { author: string }[] }[],
+  ) {
+    const authors = new Set<string>();
+    for (const c of comments) {
+      authors.add(c.author);
+      for (const r of c.replies ?? []) authors.add(r.author);
+    }
+
+    const users = await this.prisma.user.findMany({
+      where: { displayName: { in: [...authors] } },
+      select: { username: true, displayName: true },
+    });
+
+    const map = new Map(users.map((u) => [u.displayName, u.username]));
+
+    return comments.map((c) => ({
+      ...c,
+      authorUsername: map.get(c.author) ?? null,
+      replies: (c.replies ?? []).map((r) => ({
+        ...r,
+        authorUsername: map.get(r.author) ?? null,
+      })),
+    }));
   }
 
   private async _saveComments(videoId: string, comments: CrawlerComment[]) {

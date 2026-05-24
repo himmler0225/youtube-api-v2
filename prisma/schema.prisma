@@ -52,6 +52,9 @@ model User {
   passwordAlgo    String?    @map("password_algo")
   status          UserStatus @default(ACTIVE)
 
+  displayName     String?    @map("display_name")
+  avatar          String?
+
   tokenVersion    Int        @default(0) @map("token_version")
 
   emailVerifiedAt DateTime?  @map("email_verified_at")

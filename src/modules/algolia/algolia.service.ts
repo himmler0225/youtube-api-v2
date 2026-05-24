@@ -36,7 +36,9 @@ export class AlgoliaService implements OnModuleInit {
       }
       await this.writeClient.saveObject({ indexName, body });
     } catch (err) {
-      this.logger.warn(`Algolia indexData [${indexName}] failed: ${String(err)}`);
+      this.logger.warn(
+        `Algolia indexData [${indexName}] failed: ${String(err)}`,
+      );
     }
   }
 

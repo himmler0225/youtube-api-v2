@@ -61,7 +61,12 @@ async function bootstrap() {
       "JWT-auth",
     )
     .addApiKey(
-      { type: "apiKey", in: "header", name: "x-service-key", description: "Internal service key" },
+      {
+        type: "apiKey",
+        in: "header",
+        name: "x-service-key",
+        description: "Internal service key",
+      },
       "x-service-key",
     )
     .addTag("auth", "Authentication endpoints")

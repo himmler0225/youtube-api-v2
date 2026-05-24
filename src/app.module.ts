@@ -15,6 +15,7 @@ import { HealthModule } from "./modules/health/health.module";
 import { AlgoliaModule } from "./modules/algolia/algolia.module";
 import { LiveModule } from "./modules/live/live.module";
 import { AiLabelModule } from "./modules/ai-label/ai-label.module";
+import { PublicUserModule } from "./modules/public-user/public-user.module";
 
 @Module({
   imports: [
@@ -32,6 +33,7 @@ import { AiLabelModule } from "./modules/ai-label/ai-label.module";
     HealthModule,
     LiveModule,
     AiLabelModule,
+    PublicUserModule,
   ],
   providers: [AppLogger, { provide: APP_GUARD, useClass: ThrottlerGuard }],
 })

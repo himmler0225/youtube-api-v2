@@ -1,8 +1,17 @@
 import { Controller, Get, Param, Query } from "@nestjs/common";
-import { ApiOperation, ApiQuery, ApiTags } from "@nestjs/swagger";
+import { ApiOperation, ApiTags } from "@nestjs/swagger";
 import { SkipThrottle } from "@nestjs/throttler";
+import { IsOptional, IsString } from "class-validator";
+import { ApiPropertyOptional } from "@nestjs/swagger";
 import { PaginationQueryDto } from "@/base/dto/pagination.dto";
 import { VideoService } from "./video.service";
+
+class VideoListQueryDto extends PaginationQueryDto {
+  @ApiPropertyOptional({ description: "Search query" })
+  @IsOptional()
+  @IsString()
+  q?: string;
+}
 
 @ApiTags("videos")
 @SkipThrottle()
@@ -11,17 +20,9 @@ export class VideoController {
   constructor(private readonly videoService: VideoService) {}
 
   @ApiOperation({ summary: "List videos with optional full-text search" })
-  @ApiQuery({ name: "q", required: false, description: "Search query" })
   @Get()
-  listVideos(
-    @Query("q") query?: string,
-    @Query() pagination: PaginationQueryDto = new PaginationQueryDto(),
-  ) {
-    return this.videoService.listVideos(
-      query,
-      pagination.page,
-      pagination.limit,
-    );
+  listVideos(@Query() dto: VideoListQueryDto) {
+    return this.videoService.listVideos(dto.q, dto.page, dto.limit);
   }
 
   @ApiOperation({
@@ -35,21 +36,9 @@ export class VideoController {
   }
 
   @ApiOperation({ summary: "Get live videos — optional keyword filter" })
-  @ApiQuery({
-    name: "q",
-    required: false,
-    description: "Search keyword (optional)",
-  })
   @Get("live")
-  searchLive(
-    @Query("q") query?: string,
-    @Query() pagination: PaginationQueryDto = new PaginationQueryDto(),
-  ) {
-    return this.videoService.searchLive(
-      query ?? "",
-      pagination.page,
-      pagination.limit,
-    );
+  searchLive(@Query() dto: VideoListQueryDto) {
+    return this.videoService.searchLive(dto.q ?? "", dto.page, dto.limit);
   }
 
   @ApiOperation({ summary: "Get distinct AI-labeled categories" })
