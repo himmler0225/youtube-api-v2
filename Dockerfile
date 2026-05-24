@@ -3,6 +3,9 @@ WORKDIR /app
 COPY package*.json ./
 RUN npm ci
 COPY . .
+# prisma generate chỉ cần schema, không cần DB thật
+ENV DATABASE_URL="postgresql://dummy:dummy@localhost/dummy"
+ENV DIRECT_URL="postgresql://dummy:dummy@localhost/dummy"
 RUN npx prisma generate
 RUN npm run build
 
