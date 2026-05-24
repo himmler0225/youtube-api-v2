@@ -101,7 +101,6 @@ export class AllExceptionsFilter implements ExceptionFilter {
       method: string;
     },
   ) {
-    // AppException 4xx are intentional business errors — warn without stack
     if (exception instanceof AppException && info.status < 500) {
       this.logger.warn(
         "Expected error",
@@ -116,7 +115,6 @@ export class AllExceptionsFilter implements ExceptionFilter {
       return;
     }
 
-    // Everything else is unexpected — log with origin file for debugging
     const err = exception instanceof Error ? exception : undefined;
     const origin = parseOrigin(err?.stack);
 

@@ -9,11 +9,9 @@ export enum ErrorCode {
   USERNAME_TAKEN = "USERNAME_TAKEN",
   EMAIL_TAKEN = "EMAIL_TAKEN",
   PHONE_TAKEN = "PHONE_TAKEN",
-  // dùng chung cho user_not_found + bad_password để tránh user enumeration
   INVALID_CREDENTIALS = "INVALID_CREDENTIALS",
   ACCOUNT_BANNED = "ACCOUNT_BANNED",
   SESSION_EXPIRED = "SESSION_EXPIRED",
-  // refresh token cũ bị tái sử dụng → dấu hiệu tấn công
   TOKEN_REUSED = "TOKEN_REUSED",
   RATE_LIMITED = "RATE_LIMITED",
   BAD_REQUEST = "BAD_REQUEST",

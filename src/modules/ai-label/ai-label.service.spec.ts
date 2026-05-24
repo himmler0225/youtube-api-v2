@@ -1,7 +1,6 @@
 import { AiLabelService } from "./ai-label.service";
 import { AppException } from "@/base/errors/app.exception";
 
-// Helper to create a mock fetch Response
 const mockFetchResponse = (body: object, status = 200): Response =>
   ({
     ok: status >= 200 && status < 300,
@@ -51,13 +50,8 @@ describe("AiLabelService", () => {
     jest.restoreAllMocks();
   });
 
-  // ---------------------------------------------------------------------------
-  // classify
-  // ---------------------------------------------------------------------------
-
   it("classify → no API key → returns null", async () => {
     mockConfig.get.mockReturnValue("");
-    // Re-instantiate so constructor reads empty key
     service = new AiLabelService(mockConfig, mockLogger, mockPrisma, mockLabelQueue);
 
     const result = await service.classify("vid1", "Some Title");
@@ -104,7 +98,6 @@ describe("AiLabelService", () => {
       .mockResolvedValueOnce(mockFetchResponse(groqSuccess("Tech", 3)));
 
     const classifyPromise = service.classify("vid1", "Tech Video");
-    // Advance timers to skip the 30_000ms delay on attempt 1
     await jest.runAllTimersAsync();
 
     const result = await classifyPromise;
@@ -118,10 +111,6 @@ describe("AiLabelService", () => {
 
     jest.useRealTimers();
   });
-
-  // ---------------------------------------------------------------------------
-  // backfill
-  // ---------------------------------------------------------------------------
 
   it("backfill → finds unlabeled videos → adds to queue, returns { queued, total }", async () => {
     const unlabeled = [{ id: "vid1" }, { id: "vid2" }, { id: "vid3" }];
@@ -139,10 +128,6 @@ describe("AiLabelService", () => {
     expect(result).toEqual({ queued: 3, total: 10 });
   });
 
-  // ---------------------------------------------------------------------------
-  // backfillDirect
-  // ---------------------------------------------------------------------------
-
   it("backfillDirect → no unlabeled videos → returns { labeled: 0, total: 0, skipped: 0 }", async () => {
     mockPrisma.video.findMany.mockResolvedValue([]);
     mockPrisma.video.count.mockResolvedValue(0);
@@ -152,7 +137,6 @@ describe("AiLabelService", () => {
     const result = await service.backfillDirect(20);
 
     expect(result).toEqual({ labeled: 0, total: 0, skipped: 0 });
-    // fetch should never be called when there are no videos
     expect(fetchSpy).not.toHaveBeenCalled();
   });
 

@@ -69,8 +69,6 @@ describe('VideoService', () => {
     );
   });
 
-  // ── findOne ────────────────────────────────────────────────────────────────
-
   describe('findOne', () => {
     it('returns cached value from Redis without hitting DB', async () => {
       const cached = { id: 'vid1', title: 'Cached Video' };
@@ -117,8 +115,6 @@ describe('VideoService', () => {
     });
   });
 
-  // ── getComments ────────────────────────────────────────────────────────────
-
   describe('getComments', () => {
     it('returns empty comments for a live video', async () => {
       mockPrisma.video.findUnique.mockResolvedValue({ isLiveContent: true });
@@ -152,7 +148,6 @@ describe('VideoService', () => {
       );
       expect(result.total).toBe(2);
       expect(result.comments).toHaveLength(2);
-      // _enrichComments adds authorUsername (null when no matching user)
       expect(result.comments[0]).toHaveProperty('authorUsername', null);
       expect(mockCrawler.getComments).not.toHaveBeenCalled();
     });
@@ -188,8 +183,6 @@ describe('VideoService', () => {
     });
   });
 
-  // ── listVideos ─────────────────────────────────────────────────────────────
-
   describe('listVideos', () => {
     it('calls prisma.video.findMany when no query is provided', async () => {
       const videos = [{ id: 'v1', title: 'Video 1' }];
@@ -224,7 +217,6 @@ describe('VideoService', () => {
       );
       expect(result.videos).toEqual(hits);
       expect(result.total).toBe(1);
-      // Algolia returned hits → should NOT fall back to Postgres FTS
       expect(mockPrisma.$queryRaw).not.toHaveBeenCalled();
     });
 

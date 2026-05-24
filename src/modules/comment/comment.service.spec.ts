@@ -37,10 +37,6 @@ describe("CommentService", () => {
     service = new CommentService(mockPrisma, mockLogger);
   });
 
-  // ---------------------------------------------------------------------------
-  // create
-  // ---------------------------------------------------------------------------
-
   it("create → video + user found → creates comment and returns with authorUsername", async () => {
     const video = { id: "vid1" };
     const user = {
@@ -80,10 +76,6 @@ describe("CommentService", () => {
     });
   });
 
-  // ---------------------------------------------------------------------------
-  // reply
-  // ---------------------------------------------------------------------------
-
   it("reply → parent comment + user found → creates reply and increments repliesCount", async () => {
     const parent = { id: "cmt1", videoId: "vid1" };
     const user = { id: "user1", username: "johndoe", displayName: "John Doe", avatar: null };
@@ -100,7 +92,6 @@ describe("CommentService", () => {
     mockPrisma.comment.findUnique.mockResolvedValue(parent);
     mockPrisma.user.findUnique.mockResolvedValue(user);
 
-    // $transaction receives an array; first element is the reply
     mockPrisma.$transaction = jest.fn().mockResolvedValue([reply, {}]);
 
     const result = await service.reply("cmt1", "user1", "Nice reply");
@@ -119,10 +110,6 @@ describe("CommentService", () => {
 
     await expect(service.reply("cmt-missing", "user1", "text")).rejects.toBeInstanceOf(AppException);
   });
-
-  // ---------------------------------------------------------------------------
-  // toggleLike
-  // ---------------------------------------------------------------------------
 
   it("toggleLike → comment not found → throws AppException", async () => {
     mockPrisma.comment.findUnique.mockResolvedValue(null);
@@ -150,10 +137,6 @@ describe("CommentService", () => {
     expect(result).toEqual({ liked: false });
   });
 
-  // ---------------------------------------------------------------------------
-  // remove
-  // ---------------------------------------------------------------------------
-
   it("remove → not owner → throws AppException forbidden", async () => {
     mockPrisma.comment.findUnique.mockResolvedValue({ id: "cmt1", userId: "other-user", parentId: null });
 
@@ -166,7 +149,6 @@ describe("CommentService", () => {
   it("remove → is owner, top-level comment → deletes successfully", async () => {
     mockPrisma.comment.findUnique.mockResolvedValue({ id: "cmt1", userId: "user1", parentId: null });
 
-    // $transaction receives an async callback — invoke it with a tx proxy
     mockPrisma.$transaction = jest.fn().mockImplementation((cb: any) => {
       const tx = {
         comment: {
@@ -183,10 +165,6 @@ describe("CommentService", () => {
     const txFn = mockPrisma.$transaction.mock.calls[0][0];
     expect(typeof txFn).toBe("function");
   });
-
-  // ---------------------------------------------------------------------------
-  // getLikedCommentIds
-  // ---------------------------------------------------------------------------
 
   it("getLikedCommentIds → returns Set of liked comment IDs", async () => {
     mockPrisma.commentLike.findMany.mockResolvedValue([

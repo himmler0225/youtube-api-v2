@@ -1,22 +1,10 @@
-/**
- * Custom exception của hệ thống — mở rộng từ HttpException của NestJS
- *
- * Thay vì throw HttpException thô, hãy dùng các static method:
- *   throw AppException.conflict('Username đã tồn tại')
- *   throw AppException.unauthorized()
- *   throw AppException.notFound('User không tồn tại')
- *
- * AllExceptionsFilter sẽ bắt và format thành ApiError chuẩn.
- */
 import { HttpException, HttpStatus } from "@nestjs/common";
 import { ErrorCode } from "./error-code";
 import { ERROR_MESSAGES } from "./error-messages";
 
 export type AppExceptionPayload = {
   code: ErrorCode;
-  // Nếu không truyền → dùng message mặc định từ ERROR_MESSAGES
   message?: string;
-  // Thông tin bổ sung (danh sách lỗi validation, v.v.)
   details?: unknown;
 };
 
@@ -28,7 +16,6 @@ export class AppException extends HttpException {
     payload: AppExceptionPayload,
     status: number = HttpStatus.BAD_REQUEST,
   ) {
-    // Ưu tiên message truyền vào → message mặc định theo code → fallback 'Error'
     const message = payload.message ?? ERROR_MESSAGES[payload.code] ?? "Error";
     super({ code: payload.code, message, details: payload.details }, status);
 
@@ -36,7 +23,6 @@ export class AppException extends HttpException {
     this.details = payload.details;
   }
 
-  // Dùng khi request không hợp lệ (tổng quát) → HTTP 400
   static badRequest(message?: string, details?: unknown) {
     return new AppException(
       { code: ErrorCode.BAD_REQUEST, message, details },

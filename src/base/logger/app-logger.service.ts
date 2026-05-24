@@ -4,7 +4,6 @@ import { redact } from "./redact";
 
 type LogLevel = "debug" | "info" | "warn" | "error";
 
-// ── ANSI codes ────────────────────────────────────────────────────────────────
 const R = "\x1b[0m";
 const B = "\x1b[1m";
 const D = "\x1b[2m";
@@ -16,7 +15,6 @@ const YELLOW = "\x1b[33m";
 const RED = "\x1b[31m";
 const MAGENTA = "\x1b[35m";
 
-// ── Level config ──────────────────────────────────────────────────────────────
 const LEVEL_COLOR: Record<LogLevel, string> = {
   debug: GRAY,
   info: `${B}${GREEN}`,
@@ -38,7 +36,6 @@ const LEVEL_ORDER: Record<LogLevel, number> = {
   error: 40,
 };
 
-// ── Helpers ───────────────────────────────────────────────────────────────────
 function timestamp(): string {
   const n = new Date();
   const hh = n.getHours().toString().padStart(2, "0");
@@ -57,7 +54,6 @@ function formatMeta(meta: unknown): string {
   });
 }
 
-// Extract the first stack frame that belongs to project source (not node_modules / node internals)
 export function parseOrigin(stack?: string): string | undefined {
   if (!stack) return undefined;
   const cwd = process.cwd();
@@ -74,7 +70,6 @@ export function parseOrigin(stack?: string): string | undefined {
   return undefined;
 }
 
-// ── Logger ────────────────────────────────────────────────────────────────────
 @Injectable()
 export class AppLogger implements LoggerService {
   private readonly minLevel: LogLevel;
@@ -85,7 +80,6 @@ export class AppLogger implements LoggerService {
     this.isDev = process.env.NODE_ENV !== "production";
   }
 
-  // NestJS LoggerService interface — context is the class name NestJS passes
   log(message: unknown, context?: string) {
     this.info(String(message), undefined, context);
   }
@@ -115,7 +109,6 @@ export class AppLogger implements LoggerService {
     this.write("debug", message, meta, context);
   }
 
-  // ── Core write ──────────────────────────────────────────────────────────────
   private write(
     level: LogLevel,
     message: unknown,
@@ -132,12 +125,6 @@ export class AppLogger implements LoggerService {
       : this.writeProd(level, msg, safeMeta, context);
   }
 
-  // ── Dev: colored ────────────────────────────────────────────────────────────
-  //
-  //  12:34:56.123  ›   INFO  [AuthService]  User logged in            { userId: 'abc' }
-  //  12:34:56.456  ›   WARN  [AuthService]  Invalid credentials       { code: 'INVALID_CREDENTIALS' }
-  //  12:34:56.789  ›  ERROR  [Filter]       Unhandled error           { file: 'src/modules/video.service.ts:45' }
-  //
   private writeDev(
     level: LogLevel,
     msg: string,
@@ -163,7 +150,6 @@ export class AppLogger implements LoggerService {
     }
   }
 
-  // ── Prod: JSON ──────────────────────────────────────────────────────────────
   private writeProd(
     level: LogLevel,
     msg: string,
@@ -190,7 +176,6 @@ export class AppLogger implements LoggerService {
   }
 }
 
-// Handles warn/error(msg, meta?, context?) overloads
 function resolveOverload(
   metaOrCtx: unknown,
   context: string | undefined,

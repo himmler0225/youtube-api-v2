@@ -18,10 +18,6 @@ describe("PublicUserService", () => {
     service = new PublicUserService(mockPrisma);
   });
 
-  // ---------------------------------------------------------------------------
-  // getProfile
-  // ---------------------------------------------------------------------------
-
   it("getProfile → user found by username → returns profile with stats", async () => {
     const user = {
       id: "user1",
@@ -40,7 +36,6 @@ describe("PublicUserService", () => {
     expect(result.username).toBe("johndoe");
     expect(result.stats.commentCount).toBe(5);
     expect(result.stats.totalLikes).toBe(42);
-    // When no displayName, username is used as author
     expect(mockPrisma.comment.count).toHaveBeenCalledWith(
       expect.objectContaining({ where: expect.objectContaining({ author: "johndoe" }) }),
     );
@@ -70,17 +65,11 @@ describe("PublicUserService", () => {
 
     const result = await service.getProfile("johndoe");
 
-    // displayName takes precedence over username as author
     expect(mockPrisma.comment.count).toHaveBeenCalledWith(
       expect.objectContaining({ where: expect.objectContaining({ author: "John Doe" }) }),
     );
-    // null likesCount falls back to 0
     expect(result.stats.totalLikes).toBe(0);
   });
-
-  // ---------------------------------------------------------------------------
-  // getComments
-  // ---------------------------------------------------------------------------
 
   it("getComments → success → returns paginated comments", async () => {
     const user = { username: "johndoe", displayName: null };
@@ -98,7 +87,6 @@ describe("PublicUserService", () => {
     expect(result.page).toBe(1);
     expect(result.limit).toBe(20);
     expect(result.comments).toHaveLength(1);
-    // skip = (1 - 1) * 20 = 0
     expect(mockPrisma.comment.findMany).toHaveBeenCalledWith(
       expect.objectContaining({ skip: 0, take: 20 }),
     );
